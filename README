@@ -1,0 +1,26 @@
+(1)dependency
+
+Jelly fish depends on automake and libtool; deSAMBA depend on zlib.
+
+Run following commands to install them (Ubuntu).
+
+apt-get install zlib1g-dev
+apt-get install automake
+apt-get install libtool
+
+(2)build project
+
+To build Jellyfish(v1.10) and deSAMBA
+
+cd PATH/deSAMBA
+bash ./build
+
+(3)build index
+
+(4)run classifation
+
+(5)run analysis
+
+(4)Demo data
+
+We use 8590 viral whole genome sequences as demo reference. And ERR1050068.fastq (Ebola virus) as demo 
