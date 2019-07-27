@@ -13,6 +13,7 @@ apt-get install libtool
 To build Jellyfish(v1.10) and deSAMBA
 
 cd PATH/deSAMBA
+unzip -o Jellyfish-1.1.10.zip
 bash ./build
 
 (3)build index
