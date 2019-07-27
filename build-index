@@ -1,0 +1,96 @@
+#!/bin/bash
+#./deAnchor-index test/refs/ taxonomy/nodes.dmp bin index
+
+ref_file=$1
+index_dir=$2
+kmer_size=31
+DE_ANCHOR=deAnchor
+
+USAGE="
+Program:   build_index
+
+  Usage:
+    `basename $0` <REF_DIR> <index_dir>
+
+  Basic:
+    <ref_file>  FILE    \"all\"\\\"viral\" OR [file] of reference sequences.
+                            - all: Using lastest NCBI RefSeq 
+                                bacteria+viral+archaea database.
+                            - viral: Using lastest NCBI RefSeq viral 
+                                database.
+                            - Otherwise using user defined reference 
+                                sequences[.fa], storing them in one file.
+                                When you have more than one files,	
+                                combined them into one.
+    <IDX_DIR>   FOLDER  folder to store index.
+"
+if [ $# -lt 2 ]
+then 
+	echo "ERROR: Parameters are not enough"
+	printf "$USAGE"
+	exit 1
+fi
+
+#make index dir
+mkdir -p $index_dir
+
+#-all download and store 
+if [ $ref_file == 'all' ]
+ then
+ 	DOWNLOAD=$index_dir/download
+	#download bacteria/viral/archaea
+	mkdir "$DOWNLOAD"
+	cp -r /home/cheng/WGS/viral_demo $DOWNLOAD
+	#bash ./download -o $DOWNLOAD -d bacteria,viral,archaea refseq
+
+	#store all fna/fa/fastq file into wgs file
+	WGS_FILE=${index_dir}/deAnchor.wgs
+	find $DOWNLOAD/ -name "*.fna"   | xargs -n 1 cat > $WGS_FILE
+	#rm source
+	rm -r "$DOWNLOAD"
+	echo "downloading end"
+fi
+
+#-all download and store 
+if [ $ref_file == 'viral' ]
+ then
+ 	DOWNLOAD=$index_dir/download
+	#download bacteria/viral/archaea
+	mkdir "$DOWNLOAD"
+	cp -r /home/cheng/WGS/viral_demo $DOWNLOAD
+	#bash ./download -o $DOWNLOAD -d viral refseq
+
+	#store all fna/fa/fastq file into wgs file
+	WGS_FILE=${index_dir}/deAnchor.wgs
+	find $DOWNLOAD/ -name "*.fna"   | xargs -n 1 cat > $WGS_FILE
+	#rm source
+	rm -r "$DOWNLOAD"
+	echo "downloading end"
+fi
+
+#jellyfish size
+FILE_SIZE=$(ls -l $WGS_FILE | awk '{print $5}')
+echo "$WGS_FILE file size" [$FILE_SIZE]
+let JELLYFISH_HASH_SIZE=FILE_SIZE*115/100
+echo "Jellyfish hash size:" [$JELLYFISH_HASH_SIZE]
+
+./bin/jellyfish count -m $kmer_size -s $JELLYFISH_HASH_SIZE -t 8 $WGS_FILE
+
+#when jellyfish output one more file
+if [ -e "mer_counts_1" ]
+then
+	#echo
+	./bin/jellyfish merge -o database.jdb mer_counts_*
+else
+	mv mer_counts_0 database.jdb
+fi
+
+#sort
+./bin/${DE_ANCHOR} kmersort -k 31 -o ${index_dir}/kmer.srt database.jdb
+rm database.jdb
+
+#index
+./bin/${DE_ANCHOR} index ${index_dir}/kmer $WGS_FILE ${index_dir}
+rm ${index_dir}/kmer.srt
+
+echo "finished building index ^_^"
