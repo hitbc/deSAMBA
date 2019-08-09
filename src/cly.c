@@ -599,7 +599,7 @@ void getUniStr_suf(uint8_t *unitig_str, uint8_t *ref, uint64_t offset, uint32_t 
 
 #define LV_L 12//max query length used in LV
 
-int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v)
+int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v, int * super_repeat)
 {
 	MAPQ 	 *m_Q 	= &(idx->mapQ);
 	bwt		 *bt 	= &(idx->bt);
@@ -740,11 +740,34 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v)
 		bool ref_search_l = (l_pre < LV_L || d_pre == 0)?true:false;//when edit distance is 0, means that extension is not over
 		bool ref_search_r = (l_suf < LV_L || d_suf == 0)?true:false;
 		uint8_t duplicate = false;
-		if(r_p_e - r_p_s > 35)
+
+		if(r_p_e - r_p_s > 50)//handle super repeat
 		{
-			duplicate = true;
-			r_p_s += ((anchor_v->n && 0xf))*((r_p_e - r_p_s)>>4);//get 10 random results (by current anchor_v->n)
-			r_p_e = MIN(r_p_s + 10, r_p_e);
+			super_repeat[0]++;
+			if(r_p_e - r_p_s > 300)
+			{
+				super_repeat[1]+=2;
+				super_repeat[1] = MIN(6, super_repeat[1]);
+			}
+			else if(r_p_e - r_p_s < 100)
+			{
+				super_repeat[1] = MAX(1,super_repeat[1]);
+				super_repeat[1]--;
+			}
+			if(super_repeat[1] > 3)//random select when super repeat
+			{
+				int block_len = r_p_e - r_p_s;
+				int random_begin = (anchor_v->n*71) % block_len;
+				r_p_s += random_begin;//get 10 random results (by current anchor_v->n)
+				r_p_e = MIN(r_p_s + 10, r_p_e);
+			}
+			//else do nothing (40~300)
+			else if(r_p_e - r_p_s < 400 && ((anchor_v->n < 500) || (super_repeat[0] % 10) == 5))//select all when anchors not enough
+			{
+				r_p_e += 0;
+			}//delete all when not-super repeat nor beginning
+			else
+				r_p_e = r_p_s;
 		}
 		//if(r_p_e - r_p_s > 40 && anchor_v->n > 30)//ignore results when too many of then
 		//	r_p_e = r_p_s;
@@ -1173,7 +1196,7 @@ void fast_classify(
 	MEM_rst 	m_r[MEM_search_FAST];
 	CLY_seed	*sv_b = s_d->seed_v_f, *sv_e = sv_b + s_d->l_seed_v_f;//begin and end of seed vector
 	SEED_INFO 	s_i = {bin_read, read_len, 0, s_d->direction};
-
+	int super_repeat[2] = {0};//0 for high, 1 for super high
 	//extend each kmer island
 	for(CLY_seed* c_sv = sv_b; c_sv < sv_e; c_sv++){
 		if(c_sv->top == false)
@@ -1203,7 +1226,7 @@ void fast_classify(
 			for(MEM_rst* c_mr = m_r; c_mr < m_r + c_mem_rst_num; ++c_mr)
 			{
 				c_mr->read_offset = string_index - c_mr->match_len;
-				int c_score = map_seed(idx, c_mr, &s_i, &(results->anchor_v));
+				int c_score = map_seed(idx, c_mr, &s_i, &(results->anchor_v), super_repeat);
 				max_score = MAX(c_score, max_score);//TODO:::
 			}
 			if(max_score > 35)
@@ -1238,6 +1261,7 @@ void slow_classify(DA_IDX* idx, SEARCH_DIR *search_dir, uint32_t read_len, cly_r
 	SP_SET sp_set = {sp_set_BUFF, 0, 500};
 	MEM_rst mem_rst[MEM_search_SLOW*800 + 1];
 	int mem_rst_num;
+	int super_repeat[2] = {0};//0 for high, 1 for super high
 	SEED_INFO seed_info = {bin_read, read_len, 0, search_dir->direction};
 	for(uint32_t i = 0; i < search_dir->l_seed_v_f; i++)
 	{
@@ -1277,7 +1301,7 @@ void slow_classify(DA_IDX* idx, SEARCH_DIR *search_dir, uint32_t read_len, cly_r
 		uint32_t a_b_idx = results->anchor_v.n;
 		int max_search = MIN(mem_rst_num, MEM_search_SLOW);
 		for(MEM_rst* c_mem_rst = mem_rst;c_mem_rst < mem_rst + max_search;++c_mem_rst)
-			map_seed(idx, c_mem_rst, &seed_info, &(results->anchor_v));
+			map_seed(idx, c_mem_rst, &seed_info, &(results->anchor_v), super_repeat);
 		//STEP3: delete results
 		Anchor * a_b = results->anchor_v.a + a_b_idx;
 		Anchor * a_e = results->anchor_v.a + results->anchor_v.n;
@@ -2038,7 +2062,7 @@ void sdp_match(uint32_t q_bg, uint32_t q_ed, uint8_t *q_str, uint8_t *t_str, uin
 				{
 					//get read pos
 					uint32_t q_pos = sa_hash[next].pos;
-					if(q_pos >= q_bg && q_bg <= q_ed)//filter 2
+					if(q_pos >= q_bg && q_pos <= q_ed)//filter 2
 					{
 						//search backward 3 bit
 						int back_len = MEM_search(q_str + q_pos - 1, c_t_str - 1, false, 4);
@@ -2087,7 +2111,7 @@ void sdp_match(uint32_t q_bg, uint32_t q_ed, uint8_t *q_str, uint8_t *t_str, uin
 				{
 					//get read pos
 					uint32_t q_pos = sa_hash[next].pos;
-					if(q_pos >= q_bg && q_bg <= q_ed)//filter 2
+					if(q_pos >= q_bg && q_pos <= q_ed)//filter 2
 					{
 						//search forward 4 bit
 						int forward_len = MEM_search(q_str + q_pos + S_A_KEMR_L, c_t_str + S_A_KEMR_L, true, 4);
@@ -2120,6 +2144,7 @@ void sdp_match(uint32_t q_bg, uint32_t q_ed, uint8_t *q_str, uint8_t *t_str, uin
 
 }
 
+#define MAX_sms_overlap (1)
 int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_HASH *sa_hash, int key_len)
 {
 	int score = 10000;//basic score: 100
@@ -2152,7 +2177,7 @@ int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str
 				xassert(total_ref_len < 2000, "");//todo::
 				uint64_t ref_offset = pre_refoffset + t_offset + pre_mch;
 				get_ref(idx->ref_bin.a, ref, ref_offset, total_ref_len, true);
-				sdp_match(pre_a->index_in_read + pre_mch - 4, c_a->index_in_read + 3, q_str, ref, total_ref_len, key_len, sa_hash, sms, pre_refoffset + pre_mch, true);//todo: store the first node
+				sdp_match(pre_a->index_in_read + pre_mch - 8, c_a->index_in_read - 1, q_str, ref, total_ref_len, key_len, sa_hash, sms, pre_refoffset + pre_mch, true);//todo: store the first node
 			}
 			//push end node
 			kv_pushp_2(spd_match, sms, spd_p);
@@ -2166,8 +2191,8 @@ int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str
 				for(; c_spd < spd_ed; c_spd++)
 				{
 					int max_score = c_spd->len;
-					uint32_t max_q = c_spd->q_pos - S_A_KEMR_L + 3;
-					uint32_t max_t = c_spd->t_pos - S_A_KEMR_L + 3;
+					uint32_t max_q = c_spd->q_pos - MAX_sms_overlap;
+					uint32_t max_t = c_spd->t_pos - MAX_sms_overlap;
 
 					for(spd_match * c_pre_sms = c_spd - 1; c_pre_sms >= sms->a; c_pre_sms--)
 					{
@@ -2258,7 +2283,7 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 			//debug_print_ACGTstring(all_ref, 30000);
 
 
-			sdp_match(c_h->q_ed, max_search_read, q_str, ref, max_search_ref, key_len, sa_hash, sms ,c_t_offset, true);
+			sdp_match(c_h->q_ed - 8, max_search_read, q_str, ref, max_search_ref, key_len, sa_hash, sms ,c_t_offset, true);
 			c_t_offset += max_search_ref - S_A_KEMR_L - 3;
 
 			//when load no new node
@@ -2273,8 +2298,8 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 		spd_match *c_sms = sms->a + current_sms++;
 		//SDP, get max score for that new node
 		int max_score = c_sms->len;
-		uint32_t max_pre_q = c_sms->q_pos - S_A_KEMR_L + 3;
-		uint32_t max_pre_t = c_sms->t_pos - S_A_KEMR_L + 3;
+		uint32_t max_pre_q = c_sms->q_pos - MAX_sms_overlap;
+		uint32_t max_pre_t = c_sms->t_pos - MAX_sms_overlap;
 		spd_match *c_sms_ed = sms->a, *c_pre_sms = sms->a + current_sms - 2;
 		for(; c_pre_sms >= c_sms_ed; c_pre_sms--)
 		{
@@ -2395,7 +2420,7 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 			//get_ref(idx->ref_bin.a, all_ref, t_offset_global, 30000, true);//from c_t_offset - max_search_ref + 1 to c_t_offset
 			//debug_print_ACGTstring(all_ref, 30000);
 
-			sdp_match(min_search_read, c_h->q_st, q_str, ref + OVER_SEARCH_M2, max_search_ref, key_len, sa_hash, sms ,c_t_offset - max_search_ref, false);
+			sdp_match(min_search_read, c_h->q_st - 1, q_str, ref + OVER_SEARCH_M2, max_search_ref, key_len, sa_hash, sms ,c_t_offset - max_search_ref, false);
 			c_t_offset = c_t_offset - max_search_ref + S_A_KEMR_L + 3;//todo
 
 			//when load no new node
@@ -2409,8 +2434,8 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 		spd_match *c_sms = sms->a + current_sms++;
 		//SDP, get max score for that new node
 		int max_score = c_sms->len;
-		uint32_t min_pre_q = c_sms->q_pos + S_A_KEMR_L + c_sms->len - 3;//next <= pre - pre_len - 9 ==> next + 9 <= pre - pre_len
-		uint32_t min_pre_t = c_sms->t_pos + S_A_KEMR_L + c_sms->len - 3;
+		uint32_t min_pre_q = c_sms->q_pos + c_sms->len + MAX_sms_overlap;//next <= pre - pre_len - 9 ==> next + 9 <= pre - pre_len
+		uint32_t min_pre_t = c_sms->t_pos + c_sms->len + MAX_sms_overlap;
 		spd_match *c_sms_ed = sms->a, *c_pre_sms = sms->a + current_sms - 2;
 		for(; c_pre_sms >= c_sms_ed; c_pre_sms--)
 		{
@@ -2647,8 +2672,8 @@ void detect_primary(chain_item *hit, uint32_t n_hit, uint32_t read_len)
 	if(n_hit == 0)
 		return;
 	//primary list
-	int primary_v[300];
-	uint8_t primary_v_idx[300];
+	int primary_v[800];
+	uint8_t primary_v_idx[800];
 	int n_primary_v = 1;
 
 	//set PRIMARY
@@ -2657,6 +2682,10 @@ void detect_primary(chain_item *hit, uint32_t n_hit, uint32_t read_len)
 	hit->primary = PRIMARY;
 	//
 	chain_item *ed_hit = hit + n_hit;
+	for(chain_item *c_hit = hit; c_hit < ed_hit; c_hit++)
+		if(c_hit->q_st > 4294960000)
+			c_hit->q_st = 0;
+
 	for(chain_item *c_hit = hit + 1; c_hit < ed_hit; c_hit++)
 	{
 		bool overlap = false;
@@ -2683,7 +2712,9 @@ void detect_primary(chain_item *hit, uint32_t n_hit, uint32_t read_len)
 				c_hit->primary = SECONDARY;
 				c_hit->pri_index = ++primary_v_idx[i];
 				//length and scores (nearly) equal with PRIMARY
-				if(c_hit->sum_score + 5 > hit[primary_v[i]].sum_score)
+				//2% of primary_v, min 5
+				int max_gap = MAX((hit[primary_v[i]].sum_score >> 6), 5);
+				if(c_hit->sum_score + max_gap > hit[primary_v[i]].sum_score)
 					c_hit->pri_index = 1;
 				if(primary_v_idx[i] == 255)
 					primary_v_idx[i] = 254;
@@ -2695,6 +2726,8 @@ void detect_primary(chain_item *hit, uint32_t n_hit, uint32_t read_len)
 			c_hit->primary = SUPPLYMENTARY;
 			c_hit->pri_index = primary_v_idx[n_primary_v] = 0;
 			primary_v[n_primary_v++] = c_hit - hit;
+			if(n_primary_v > 750)
+				n_primary_v = 750;
 		}
 	}
 }
