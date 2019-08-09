@@ -41,7 +41,7 @@ if [ $ref_file == 'all' ]
 	#download bacteria/viral/archaea
 	mkdir "$DOWNLOAD"
 	cp -r /home/cheng/WGS/viral_demo $DOWNLOAD
-	#bash ./download -o $DOWNLOAD -d bacteria,viral,archaea refseq
+	bash ./download -o $DOWNLOAD -d bacteria,viral,archaea refseq
 
 	#store all fna/fa/fastq file into wgs file
 	WGS_FILE=${index_dir}/deAnchor.wgs
@@ -58,7 +58,7 @@ if [ $ref_file == 'viral' ]
 	#download bacteria/viral/archaea
 	mkdir "$DOWNLOAD"
 	cp -r /home/cheng/WGS/viral_demo $DOWNLOAD
-	#bash ./download -o $DOWNLOAD -d viral refseq
+	bash ./download -o $DOWNLOAD -d viral refseq
 
 	#store all fna/fa/fastq file into wgs file
 	WGS_FILE=${index_dir}/deAnchor.wgs
