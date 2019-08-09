@@ -24,7 +24,12 @@ build-index all ./index_dir
 
 (4)run classifation
 
+/bin/deSAMBA classify -t 4 ./index_dir read.fasta -o result.sam
+
 (5)run analysis
+
+./download taxnomy #download node.dmp
+./bin/deSAMBA analysis ana_meta ./result.sam ./nodes.dmp 
 
 (4)Demo data
 
@@ -37,7 +42,7 @@ unzip -o viral-wgs.zip
 cd ..
 bash ./build-index ./demo/viral-wgs.fa ./demo_index
 ./bin/deSAMBA classify -t 4 ./demo_index ./demo/ERR1050068.fastq -o ./ERR1050068.sam
-./bin/deSAMBA analysis anameta ./ERR1050068.sam ./demo/nodes.dmp
+./bin/deSAMBA analysis ana_meta ./ERR1050068.sam ./demo/nodes.dmp
 
 
 
