@@ -7,7 +7,7 @@ bash build_jellyfish
 cd ..
 #build deSAMBA
 cd ./src
-make
+make -j 4
 cd ..
 mkdir bin
 cp -r Jellyfish-1.1.10/bin ./
