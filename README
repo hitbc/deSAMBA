@@ -55,6 +55,7 @@ to combined mulity fasta files into one.
 
 We use part of viral whole genome sequences as demo reference(NCBI viral reference sequences, AUG 2018). And ERR1050068.fastq 
 (Zaire ebolavirus, https://www.ncbi.nlm.nih.gov/sra/ERR1050068, tid = 186538) as demo meta-genomic data set.
+Besides, we provide nodes.dump (AUG 2018) to running analysis.
 
 cd demo
 cd ..
