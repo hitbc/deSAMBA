@@ -795,7 +795,7 @@ int get_uni_v(char* refPath,
 			n_total += data[i].unitig_v.n;
 		UNITIG_V *u_v = &(idx->unitig_v);
 		u_v->n = u_v->m = n_total;
-		u_v->a = xcalloc_t(UNITIG, n_total);
+		u_v->a = xcalloc_t(UNITIG, n_total + 1000);
 		UNITIG * u_v_p = u_v->a;
 		size_t idx_g = 0;//global index
 		for (int i = 0; i < N_T_UNI_V; ++i)
