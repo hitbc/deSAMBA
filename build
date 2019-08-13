@@ -4,9 +4,9 @@
 cd Jellyfish-1.1.10
 bash build_jellyfish
 cd ..
-cd deAnchor
+cd ./src
 make
 cd ..
 mkdir bin
 cp ./Jellyfish-1.1.10/bin/jellyfish ./bin
-cp ./deAnchor/deAnchor ./bin
+cp ./src/deSAMBA ./bin
