@@ -16,5 +16,5 @@ cp ./src/deSAMBA ./bin
 cd  ./demo
 unzip -o ERR1050068.zip
 unzip -o nodes.zip
-unzip -o viral-wgs.zip
+unzip -o viral-gs.zip
 cd ..
