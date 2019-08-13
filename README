@@ -36,11 +36,8 @@ build-index all ./index_dir
 We use 8590 viral whole genome sequences as demo reference(NCBI viral reference sequences, AUG 2018). And ERR1050068.fastq (Zaire ebolavirus, https://www.ncbi.nlm.nih.gov/sra/ERR1050068, tid = 186538) as demo meta-genomic data set.
 
 cd demo
-unzip -o ERR1050068.zip
-unzip -o nodes.zip
-unzip -o viral-wgs.zip
 cd ..
-bash ./build-index ./demo/viral-wgs.fa ./demo_index
+bash ./build-index ./demo/viral-ws.fa ./demo_index
 ./bin/deSAMBA classify -t 4 ./demo_index ./demo/ERR1050068.fastq -o ./ERR1050068.sam
 ./bin/deSAMBA analysis ana_meta ./ERR1050068.sam ./demo/nodes.dmp
 
