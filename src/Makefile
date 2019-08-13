@@ -1,7 +1,7 @@
 SOURCE  := $(wildcard lib/*.c) $(wildcard *.c) $(wildcard *.cpp)
 OBJS    := $(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(SOURCE)))
   
-TARGET  := deAnchor
+TARGET  := deSAMBA
   
 #compile and lib parameter
 CC      := gcc -std=c99
