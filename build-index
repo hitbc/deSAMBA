@@ -1,5 +1,5 @@
 #!/bin/bash
-#./deAnchor-index test/refs/ taxonomy/nodes.dmp bin index
+#./deSAMBA-index test/refs/ taxonomy/nodes.dmp bin index
 
 ref_file=$1
 index_dir=$2
