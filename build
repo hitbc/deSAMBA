@@ -1,12 +1,19 @@
 #!/bin/bash
 
 #build Jelly fish version 1.1.10
+unzip -o Jellyfish-1.1.10.zip
 cd Jellyfish-1.1.10
 bash build_jellyfish
 cd ..
+#build deSAMBA
 cd ./src
 make
 cd ..
 mkdir bin
 cp -r Jellyfish-1.1.10/bin ./
 cp ./src/deSAMBA ./bin
+#unzip demo data
+cd  ./demo
+unzip -o ERR1050068.zip
+unzip -o nodes.zip
+unzip -o viral-wgs.zip
