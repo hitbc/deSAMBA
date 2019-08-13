@@ -4,7 +4,7 @@
 ref_file=$1
 index_dir=$2
 kmer_size=31
-DE_ANCHOR=deAnchor
+DE_SAMBA=./bin/deSAMBA
 
 USAGE="
 Program:   build_index
@@ -30,6 +30,8 @@ then
 	printf "$USAGE"
 	exit 1
 fi
+
+WGS_FILE=${ref_file}
 
 #make index dir
 mkdir -p $index_dir
@@ -83,14 +85,14 @@ then
 	./bin/jellyfish merge -o database.jdb mer_counts_*
 else
 	mv mer_counts_0 database.jdb
-fi
+fi 
 
 #sort
-./bin/${DE_ANCHOR} kmersort -k 31 -o ${index_dir}/kmer.srt database.jdb
+${DE_SAMBA} kmersort -k 31 -o ${index_dir}/kmer.srt database.jdb
 rm database.jdb
 
 #index
-./bin/${DE_ANCHOR} index ${index_dir}/kmer $WGS_FILE ${index_dir}
-rm ${index_dir}/kmer.srt
+${DE_SAMBA} index ${index_dir}/kmer.srt $WGS_FILE ${index_dir}
+#rm ${index_dir}/kmer.srt
 
-echo "finished building index ^_^"
+echo "finished building index!"
