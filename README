@@ -38,7 +38,7 @@ build-index all ./index_dir
 
 using command:
   find fasta_file_dir/ -name "*.fasta"   | xargs -n 1 cat > WGS_FILE.fa
-to combined multy fasta files into one.
+to combined mulity fasta files into one.
 
 (4)run classifation
 
