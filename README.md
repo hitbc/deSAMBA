@@ -52,7 +52,8 @@ bash ./build
 ```
    to combined mulity fasta files into one.
  
-**demo**
+**Demo**
+
 Run "build-index" to build index, one of following three commands can be chosen
 ```
 build-index all ./index_dir
