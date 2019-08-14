@@ -43,14 +43,18 @@ build-index [file].fa ./index_dir
 
   Basic:
     <ref_file>  FILE    "all""viral" OR [file] of reference sequences.
+    
                             - all: Using lastest NCBI RefSeq 
                                 bacteria+viral+archaea database.
+                                
                             - viral: Using lastest NCBI RefSeq viral 
                                 database.
+                                
                             - Otherwise using user defined reference 
                                 sequences[.fa], storing them in one file.
                                 When you have more than one files,	
                                 combined them into one.
+                                
     <IDX_DIR>   FOLDER  folder to store index.
 
 using command:
