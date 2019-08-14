@@ -39,9 +39,11 @@ build-index viral ./index_dir
 build-index [file].fa ./index_dir
 ```
   Usage:
+  
     build-index <REF_DIR> <index_dir>
 
   Basic:
+  
     <ref_file>  FILE    "all""viral" OR [file] of reference sequences.
     
                             - all: Using lastest NCBI RefSeq 
