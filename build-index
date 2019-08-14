@@ -70,7 +70,7 @@ fi
 FILE_SIZE=$(ls -l $WGS_FILE | awk '{print $5}')
 echo "$WGS_FILE file size" [$FILE_SIZE]
 let JELLYFISH_HASH_SIZE=FILE_SIZE*115/100
-if [ JELLYFISH_HASH_SIZE > 12000000000 ]; then #at most 12G kmer, this will using 144G MEM
+if [ ${JELLYFISH_HASH_SIZE} -gt 12000000000 ]; then #at most 12G kmer, this will using 144G MEM
 	JELLYFISH_HASH_SIZE=12000000000
 fi
 let MAX_JF_MEM=JELLYFISH_HASH_SIZE*12/1000000
