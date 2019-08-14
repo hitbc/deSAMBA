@@ -9,7 +9,6 @@ deSAMBA-meta
 5. [run analysis](#run-analysis)
 6. [Demo datat](#Demo-data)
 
-
 ## dependency
 
 Jelly fish depends on g++, make, automake and libtool; deSAMBA depend on zlib.
@@ -32,12 +31,6 @@ bash ./build
 ```
 ## build index
 
-Run "build-index" to build index, one of following three commands can be chosen
-```
-build-index all ./index_dir
-build-index viral ./index_dir
-build-index [file].fa ./index_dir
-```
 **Usage**
   
     build-index <REF_DIR> <index_dir>
@@ -58,6 +51,14 @@ build-index [file].fa ./index_dir
         find fasta_file_dir/ -name "*.fasta"   | xargs -n 1 cat > WGS_FILE.fa
 ```
    to combined mulity fasta files into one.
+ 
+**demo**
+Run "build-index" to build index, one of following three commands can be chosen
+```
+build-index all ./index_dir
+build-index viral ./index_dir
+build-index [file].fa ./index_dir
+```
 
 ## run classifation
 ```
