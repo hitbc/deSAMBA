@@ -76,11 +76,11 @@ fi
 let MAX_JF_MEM=JELLYFISH_HASH_SIZE*12/1000000
 echo "Jellyfish hash size:" [$JELLYFISH_HASH_SIZE] "this will using MEM at most" ${MAX_JF_MEM}"M"
 
+./bin/jellyfish count -m $kmer_size -s $JELLYFISH_HASH_SIZE -t 8 $WGS_FILE
+
 if [[ $ref_file == 'all' || $ref_file == 'viral' ]]; then
 	rm ${WGS_FILE}
 fi
-
-./bin/jellyfish count -m $kmer_size -s $JELLYFISH_HASH_SIZE -t 8 $WGS_FILE
 
 #when jellyfish output one more file
 if [ -e "mer_counts_1" ]
@@ -97,6 +97,6 @@ rm database.jdb
 
 #index
 ${DE_SAMBA} index ${index_dir}/kmer.srt $WGS_FILE ${index_dir}
-#rm ${index_dir}/kmer.srt
+rm ${index_dir}/kmer.srt
 
 echo "finished building index!"
