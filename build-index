@@ -8,10 +8,8 @@ DE_SAMBA=./bin/deSAMBA
 
 USAGE="
 Program:   build_index
-
   Usage:
     `basename $0` <REF_DIR> <index_dir>
-
   Basic:
     <ref_file>  FILE    \"all\"\\\"viral\" OR [file] of reference sequences.
                             - all: Using lastest NCBI RefSeq 
@@ -45,7 +43,7 @@ if [ $ref_file == 'all' ]
 	bash ./download -o $DOWNLOAD -d bacteria,viral,archaea refseq
 
 	#store all fna/fa/fastq file into wgs file
-	WGS_FILE=${index_dir}/deAnchor.wgs
+	WGS_FILE=${index_dir}/deSAMBA.wgs
 	find $DOWNLOAD/ -name "*.fna"   | xargs -n 1 cat > $WGS_FILE
 	#rm source
 	rm -r "$DOWNLOAD"
@@ -61,7 +59,7 @@ if [ $ref_file == 'viral' ]
 	bash ./download -o $DOWNLOAD -d viral refseq
 
 	#store all fna/fa/fastq file into wgs file
-	WGS_FILE=${index_dir}/deAnchor.wgs
+	WGS_FILE=${index_dir}/deSAMBA.wgs
 	find $DOWNLOAD/ -name "*.fna"   | xargs -n 1 cat > $WGS_FILE
 	#rm source
 	rm -r "$DOWNLOAD"
@@ -72,7 +70,15 @@ fi
 FILE_SIZE=$(ls -l $WGS_FILE | awk '{print $5}')
 echo "$WGS_FILE file size" [$FILE_SIZE]
 let JELLYFISH_HASH_SIZE=FILE_SIZE*115/100
-echo "Jellyfish hash size:" [$JELLYFISH_HASH_SIZE]
+if [ JELLYFISH_HASH_SIZE > 12000000000 ]; then #at most 12G kmer, this will using 144G MEM
+	JELLYFISH_HASH_SIZE=12000000000
+fi
+let MAX_JF_MEM=JELLYFISH_HASH_SIZE*12/1000000
+echo "Jellyfish hash size:" [$JELLYFISH_HASH_SIZE] "this will using MEM at most" ${MAX_JF_MEM}"M"
+
+if [[ $ref_file == 'all' || $ref_file == 'viral' ]]; then
+	rm ${WGS_FILE}
+fi
 
 ./bin/jellyfish count -m $kmer_size -s $JELLYFISH_HASH_SIZE -t 8 $WGS_FILE
 
