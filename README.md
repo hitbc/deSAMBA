@@ -3,7 +3,12 @@ deSAMBA-meta
 
 ## Table of Contents
 1. [dependency](#dependency)
-2. [build project](#build project)
+2. [build project](#build-project)
+3. [build index](#build-index)
+4. [run classifation](#run-classifation)
+5. [run analysis](#run-analysis)
+6. [Demo datat](#Demo-data)
+
 
 ## dependency
 
