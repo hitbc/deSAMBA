@@ -78,25 +78,31 @@ fi
 let MAX_JF_MEM=JELLYFISH_HASH_SIZE*12/1000000
 echo "Jellyfish hash size:" [$JELLYFISH_HASH_SIZE] "this will using MEM at most" ${MAX_JF_MEM}"M"
 
-./bin/jellyfish count -m $kmer_size -s $JELLYFISH_HASH_SIZE -t 8 $WGS_FILE
+#jellyfish count
+jelly_fish_dir="${index_dir}/jelly_fish"
+mkdir ${jelly_fish_dir}
+jelly_fish_prefix="${jelly_fish_dir}/mer"
+
+./bin/jellyfish count -m $kmer_size -s $JELLYFISH_HASH_SIZE -t 8 -o ${jelly_fish_prefix} $WGS_FILE
 
 if [[ $ref_file == 'all' || $ref_file == 'viral' ]]; then
 	rm ${WGS_FILE}
 fi
 
+#jellyfish merge
 #when jellyfish output one more file
-if [ -e "mer_counts_1" ]
+if [ -e "${jelly_fish_prefix}_1" ]
 then
 	#echo
-	./bin/jellyfish merge -o database.jdb mer_counts_*
-	rm mer_count*
+	./bin/jellyfish merge -o ${index_dir}/database.jdb ${jelly_fish_prefix}*
+	rm -r ${jelly_fish_dir}
 else
-	mv mer_counts_0 database.jdb
+	mv ${jelly_fish_prefix}_0 ${index_dir}/database.jdb
 fi 
 
 #sort
-${DE_SAMBA} kmersort -k 31 -o ${index_dir}/kmer.srt database.jdb
-rm database.jdb
+${DE_SAMBA} kmersort -k 31 -o ${index_dir}/kmer.srt ${index_dir}/database.jdb
+rm ${index_dir}/database.jdb
 
 #index
 ${DE_SAMBA} index ${index_dir}/kmer.srt $WGS_FILE ${index_dir}
