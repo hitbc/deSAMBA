@@ -89,6 +89,7 @@ if [ -e "mer_counts_1" ]
 then
 	#echo
 	./bin/jellyfish merge -o database.jdb mer_counts_*
+	rm mer_count*
 else
 	mv mer_counts_0 database.jdb
 fi 
