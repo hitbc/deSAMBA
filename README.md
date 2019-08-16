@@ -34,6 +34,14 @@ bash ./build-index ./demo/viral-gs.fa ./demo_index
 ./bin/deSAMBA analysis ana_meta ./ERR1050068.sam ./demo/nodes.dm
 ```
 
+## Introduction
+
+## Memory usage
+
+DeSAMBA fits modern servers and the peak memory footprint depends on the size and complexity of reference genome. Memory used for building index is bigger than running classification, so you can build index in a server with big memory and distribute the index in a small one. For opinion "all"(see opinion part for detail), 160 Gigabytes memory is required to build index, and 69 Gigabytes to run classification (Nov 2018, 35 Gigabytes of reference genome). For opinion "viral", 3 Gigabytes memory is required to build index, and 1 Gigabytes to run classification. As NCBI RefSeq database grows fast, more memory mey be required by now. 
+
+When memory not enough in server, you can split reference genome into small pieces, then build index and classify reads separately.
+
 ## build project
 
 To build Jellyfish(v1.10) and deSAMBA
