@@ -86,8 +86,31 @@ build-index [file].fa ./index_dir
 
 ## run classifation
 ```
-/bin/deSAMBA classify -t 4 ./index_dir read.fasta -o result.sam
+/bin/deSAMBA classify -t 4 ./index_dir read.fastq -o result.sam
 ```
+
+```
+  Usage:     deSAMBA  classify  [Options] <IndexDir> [ReadFiles.fa][...]
+  Basic:   
+    <IndexDir>      FOLDER   the directory contains deSAMBA index
+    [ReadFiles.fa]  FILES    reads files, FASTQ(A) format, separated by space
+  Options:
+    -h,             help
+    -t, INT         number of threads[4]
+    -l, INT         minimum matching length(will be ignored when classifying short NGS reads)[170]
+    -r, INT         max Output number of secondary alignments[5]
+    -o, FILE        output results into file [stdout]
+    -s, FILE        MIN score(the number of 9-mer match)[64]
+    -f, STR         output format, one of:
+                    - SAM: SAM without SEQ and QUAL, default
+                    - SAM_FULL: normal SAM
+                    - DES: smallest format
+                    - DES_FULL: all results will be showed, ignore '-r' opinion
+
+```
+Increasing "-l" and "-s" opinions will increase accuracy but decrease sensitivity.
+[read.fastq] can be long noisy reads(error rate < 25%) or short NGS reads.
+
 ## run analysis
 ```
 ./download taxnomy #download node.dmp
