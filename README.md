@@ -1,6 +1,8 @@
 deSAMBA-meta
 ======
 
+deSAMBA: fast and accurate classification of metagenomics long reads with sparse approximate matches
+
 ## Table of Contents
 1. [dependency](#dependency)
 2. [build project](#build-project)
@@ -21,6 +23,17 @@ sudo apt-get install libtool
 sudo apt-get install make
 sudo apt-get install g++
 ```
+## Quick start
+```
+git clone https://github.com/hitbc/deSAMBA.git --depth=1
+bash ./build
+bash ./build-index ./demo/viral-gs.fa ./demo_index
+#classify
+./bin/deSAMBA classify -t 4 ./demo_index ./demo/ERR1050068.fastq -o ./ERR1050068.sam
+#analysis
+./bin/deSAMBA analysis ana_meta ./ERR1050068.sam ./demo/nodes.dm
+```
+
 ## build project
 
 To build Jellyfish(v1.10) and deSAMBA
