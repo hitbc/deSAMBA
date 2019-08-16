@@ -29,6 +29,7 @@ sudo apt-get install g++
 ## Quick start
 ```
 git clone https://github.com/hitbc/deSAMBA.git --depth=1
+cd ./deSAMBA
 bash ./build
 bash ./build-index ./demo/viral-gs.fa ./demo_index
 #classify
