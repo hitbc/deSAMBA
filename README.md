@@ -1,4 +1,4 @@
-deSAMBA-meta
+deSAMBA
 ======
 
 deSAMBA: fast and accurate classification of metagenomics long reads with sparse approximate matches
@@ -39,7 +39,7 @@ bash ./build-index ./demo/viral-gs.fa ./demo_index
 
 ## Introduction
 
-deSAMBA(de Bruijn graph-based Sparse Approximate Match Block Analyzer) is a tailored long read classification approach using a novel sparse approximate match-based pseudo alignment algorithm. Benchmarks on real datasets demonstrate that deSAMBA enables to simultaneously achieve fast speed and good classification yields, which outperforms state-of-the-art tools and has many potentials to cutting-edge metagenomics studies. 
+DeSAMBA(de Bruijn graph-based Sparse Approximate Match Block Analyzer) is a tailored long read classification approach using a novel sparse approximate match-based pseudo alignment algorithm. Benchmarks on real datasets demonstrate that deSAMBA enables to simultaneously achieve fast speed and good classification yields, which outperforms state-of-the-art tools and has many potentials to cutting-edge metagenomics studies. 
 
 ## Memory usage
 
