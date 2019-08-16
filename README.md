@@ -5,11 +5,14 @@ deSAMBA: fast and accurate classification of metagenomics long reads with sparse
 
 ## Table of Contents
 1. [dependency](#dependency)
-2. [build project](#build-project)
-3. [build index](#build-index)
-4. [run classifation](#run-classifation)
-5. [run analysis](#run-analysis)
-6. [Demo datat](#Demo-data)
+2. [Quick start](#Quick-start)
+3. [Introduction](#Introduction)
+4. [Memory usage](#Memory-usage)
+5. [build project](#build-project)
+6. [build index](#build-index)
+7. [run classifation](#run-classifation)
+8. [run analysis](#run-analysis)
+9. [Demo datat](#Demo-data)
 
 ## dependency
 
