@@ -81,9 +81,9 @@ bash ./build
 
 Run "build-index" to build index, one of following three commands can be chosen
 ```
-build-index all ./index_dir
-build-index viral ./index_dir
-build-index [file].fa ./index_dir
+bash build-index all ./index_dir
+bash build-index viral ./index_dir
+bash build-index [file].fa ./index_dir
 ```
 
 ## Run classifation
