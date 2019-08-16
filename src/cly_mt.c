@@ -466,7 +466,7 @@ static void classify_usage()
 	fprintf(stderr, "                    - SAM: SAM without SEQ and QUAL, default\n");
 	fprintf(stderr, "                    - SAM_FULL: normal SAM\n");
 	fprintf(stderr, "                    - DES: smallest format\n");
-	fprintf(stderr, "                    - DES_FULL: all results are showed, ignore '-r' opinion\n");
+	fprintf(stderr, "                    - DES_FULL: all results are showed, ignore '-r' option\n");
 	fprintf(stderr, "\n");
 	//fprintf(stderr, "Options:   -e,           Error rate[0.85]\n");
 	//fprintf(stderr, "Options:   -a,           Output all results\n");
