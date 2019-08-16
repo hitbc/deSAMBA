@@ -55,7 +55,7 @@ git clone https://github.com/hitbc/deSAMBA.git --depth=1
 cd PATH/deSAMBA
 bash ./build
 ```
-## build index
+## Build index
 
 **Usage**
   
