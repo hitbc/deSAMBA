@@ -43,9 +43,7 @@ DeSAMBA(de Bruijn graph-based Sparse Approximate Match Block Analyzer) is a tail
 
 ## Memory usage
 
-DeSAMBA fits modern servers and the peak memory footprint depends on the size and complexity of reference genome. Memory used for building index is bigger than running classification, so you can build index in a server with big memory and distribute the index in a small one. For opinion "all"(see opinion part for detail), 160 Gigabytes memory is required to build index, and 69 Gigabytes to run classification (Nov 2018, 35 Gigabytes of reference genome). For opinion "viral", 3 Gigabytes memory is required to build index, and 1 Gigabytes to run classification. As NCBI RefSeq database growing fast, more memory mey be required at present. 
-
-When memory not enough in server, you can split reference genome into small pieces, then build index and classify reads separately.
+DeSAMBA fits modern servers and the peak memory footprint depends on the size and complexity of reference genome. Memory used for building index is bigger than running classification, so you can build index in a server with big memory and distribute the index in a small one. For option "all"(see build index options part for detail), 160 Gigabytes memory is required to build index, and 69 Gigabytes to run classification (Nov 2018, 35 Gigabytes of reference genome). For option "viral", 3 Gigabytes memory is required to build index, and 1 Gigabytes to run classification. As NCBI RefSeq database growing fast, more memory mey be required at present. 
 
 ## Build project
 
@@ -108,10 +106,10 @@ build-index [file].fa ./index_dir
                     - SAM: SAM without SEQ and QUAL, default
                     - SAM_FULL: normal SAM
                     - DES: smallest format
-                    - DES_FULL: all results will be showed, ignore '-r' opinion
+                    - DES_FULL: all results will be showed, ignore '-r' option
 
 ```
-Increasing "-l" and "-s" opinions will increase accuracy but decrease sensitivity.
+Increasing "-l" and "-s" options will increase accuracy but decrease sensitivity.
 [read.fastq] can be long noisy reads(error rate < 25%) or short NGS reads.
 
 ## Run analysis
