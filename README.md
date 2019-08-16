@@ -4,17 +4,17 @@ deSAMBA-meta
 deSAMBA: fast and accurate classification of metagenomics long reads with sparse approximate matches
 
 ## Table of Contents
-1. [dependency](#dependency)
+1. [Dependency](#dependency)
 2. [Quick start](#Quick-start)
 3. [Introduction](#Introduction)
 4. [Memory usage](#Memory-usage)
-5. [build project](#build-project)
-6. [build index](#build-index)
-7. [run classifation](#run-classifation)
-8. [run analysis](#run-analysis)
+5. [Build project](#build-project)
+6. [Build index](#build-index)
+7. [Run classifation](#run-classifation)
+8. [Run analysis](#run-analysis)
 9. [Demo datat](#Demo-data)
 
-## dependency
+## Dependency
 
 Jelly fish depends on g++, make, automake and libtool; deSAMBA depend on zlib.
 
@@ -47,7 +47,7 @@ DeSAMBA fits modern servers and the peak memory footprint depends on the size an
 
 When memory not enough in server, you can split reference genome into small pieces, then build index and classify reads separately.
 
-## build project
+## Build project
 
 To build Jellyfish(v1.10) and deSAMBA
 ```
@@ -87,7 +87,7 @@ build-index viral ./index_dir
 build-index [file].fa ./index_dir
 ```
 
-## run classifation
+## Run classifation
 ```
 /bin/deSAMBA classify -t 4 ./index_dir read.fastq -o result.sam
 ```
@@ -114,7 +114,7 @@ build-index [file].fa ./index_dir
 Increasing "-l" and "-s" opinions will increase accuracy but decrease sensitivity.
 [read.fastq] can be long noisy reads(error rate < 25%) or short NGS reads.
 
-## run analysis
+## Run analysis
 ```
 ./download taxnomy #download node.dmp
 ./bin/deSAMBA analysis ana_meta ./result.sam ./nodes.dmp 
