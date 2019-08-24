@@ -744,7 +744,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 		if(r_p_e - r_p_s > 50)//handle super repeat
 		{
 			super_repeat[0]++;
-			if(r_p_e - r_p_s > 300)
+			if(r_p_e - r_p_s > 200)
 			{
 				super_repeat[1]+=2;
 				super_repeat[1] = MIN(6, super_repeat[1]);
@@ -754,7 +754,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 				super_repeat[1] = MAX(1,super_repeat[1]);
 				super_repeat[1]--;
 			}
-			if(super_repeat[1] > 3)//random select when super repeat
+			if(super_repeat[1] > 2)//random select when super repeat
 			{
 				int block_len = r_p_e - r_p_s;
 				int random_begin = (anchor_v->n*71) % block_len;
@@ -762,7 +762,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 				r_p_e = MIN(r_p_s + 10, r_p_e);
 			}
 			//else do nothing (40~300)
-			else if(r_p_e - r_p_s < 400 && ((anchor_v->n < 500) || (super_repeat[0] % 10) == 5))//select all when anchors not enough
+			else if(r_p_e - r_p_s < 200 && ((anchor_v->n < 200) || (super_repeat[0] % 10) == 5))//select all when anchors not enough
 			{
 				r_p_e += 0;
 			}//delete all when not-super repeat nor beginning
