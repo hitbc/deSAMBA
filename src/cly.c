@@ -2560,10 +2560,10 @@ void delete_small_score_rst(
 {
 	if(results->hit.n == 0)
 		return;
-	if(results->hit.n > 150)//delete result with only one anchor
+	if(results->hit.n > 100)//delete result with only one anchor
 	{
-		int rst_num = 50;//delete result without top anchor
-		for(;rst_num < results->hit.n && results->hit.a[rst_num].anchor_number > 1;rst_num++);
+		int rst_num = 100;//delete result without top anchor
+		for(;rst_num < results->hit.n && results->hit.a[rst_num].anchor_number > 1 && results->hit.a[rst_num].sum_score > 50 ;rst_num++);
 		results->hit.n = rst_num;
 	}
 	results->hit.n = MIN(1000, results->hit.n);
