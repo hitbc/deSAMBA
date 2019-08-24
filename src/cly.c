@@ -2566,11 +2566,8 @@ void delete_small_score_rst(
 		for(;rst_num < results->hit.n && results->hit.a[rst_num].anchor_number > 1;rst_num++);
 		results->hit.n = rst_num;
 	}
-	if(results->hit.n > 10000)
-	{
-		fprintf(stderr, "[%s], too many result, [%ld]\n", results->read->name.s, results->hit.n);
-		results->hit.n = MIN(10000, results->hit.n);
-	}
+	results->hit.n = MIN(1000, results->hit.n);
+
 	uint32_t l_read = results->read->seq.l;
 
 	//Part 2: //seed combine hash	//seed hash, build//store seed hash
