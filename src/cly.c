@@ -762,7 +762,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 				r_p_e = MIN(r_p_s + 10, r_p_e);
 			}
 			//else do nothing (40~300)
-			else if(r_p_e - r_p_s < 200 && ((anchor_v->n < 200) || (super_repeat[0] % 10) == 5))//select all when anchors not enough
+			else if(r_p_e - r_p_s < 200 && ((anchor_v->n < 200) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
 			{
 				r_p_e += 0;
 			}//delete all when not-super repeat nor beginning
@@ -2560,9 +2560,9 @@ void delete_small_score_rst(
 {
 	if(results->hit.n == 0)
 		return;
-	if(results->hit.n > 100)//delete result with only one anchor
+	if(results->hit.n > 150)//delete result with only one anchor
 	{
-		int rst_num = 100;//delete result without top anchor
+		int rst_num = 150;//delete result without top anchor
 		for(;rst_num < results->hit.n && results->hit.a[rst_num].anchor_number > 1 && results->hit.a[rst_num].sum_score > 50 ;rst_num++);
 		results->hit.n = rst_num;
 	}
