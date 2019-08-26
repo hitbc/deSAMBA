@@ -762,7 +762,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 				r_p_e = MIN(r_p_s + 10, r_p_e);
 			}
 			//else do nothing (40~300)
-			else if(r_p_e - r_p_s < 300 && ((anchor_v->n < 100) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
+			else if(r_p_e - r_p_s < 150 && ((anchor_v->n < 100) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
 			{
 				r_p_e += 0;
 			}//delete all when not-super repeat nor beginning
