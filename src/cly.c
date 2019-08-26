@@ -762,7 +762,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 				r_p_e = MIN(r_p_s + 10, r_p_e);
 			}
 			//else do nothing (40~300)
-			else if(r_p_e - r_p_s < 200 && ((anchor_v->n < 200) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
+			else if(r_p_e - r_p_s < 300 && ((anchor_v->n < 100) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
 			{
 				r_p_e += 0;
 			}//delete all when not-super repeat nor beginning
@@ -2563,7 +2563,7 @@ void delete_small_score_rst(
 	if(results->hit.n > 150)//delete result with only one anchor
 	{
 		int rst_num = 150;//delete result without top anchor
-		for(;rst_num < results->hit.n && results->hit.a[rst_num].anchor_number > 1 && results->hit.a[rst_num].sum_score > 50 ;rst_num++);
+		for(;rst_num < results->hit.n && results->hit.a[rst_num].sum_score > 50 ;rst_num++);
 		results->hit.n = rst_num;
 	}
 	results->hit.n = MIN(1000, results->hit.n);
@@ -2775,7 +2775,7 @@ void classify_seq(kseq_t *read, DA_IDX* idx, cly_r *results, Classify_buff_pool 
 	int run_slow_mode = false;
 	if(results->hit.n <= 0)//when no results
 		run_slow_mode = true;
-	else if(results->hit.a[0].anchor_number < 5)//when not sufficient anchors
+	else if(results->hit.a[0].anchor_number < 5 && results->anchor_v.n < 100)//when not sufficient anchors
 	{
 		run_slow_mode = true;
 		//run in 2nd Generation reads mode
@@ -2790,7 +2790,7 @@ void classify_seq(kseq_t *read, DA_IDX* idx, cly_r *results, Classify_buff_pool 
 		resolve_tree(results); //SLOW MODE for error rate over an0.2
 #ifndef CONSIDER_BOTH_ORIENTATION
 		////SLOW MODE-loop3
-		if(both_direction || results->hit.n <= 0 || results->hit.a[0].anchor_number < 5)
+		if(both_direction || results->hit.n <= 0 || (results->hit.a[0].anchor_number < 5  && results->anchor_v.n < 100) )
 		{
 			slow_classify(idx, search_dir + 1, read_len, results);
 			resolve_tree(results);
