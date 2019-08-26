@@ -1182,7 +1182,7 @@ void show_anchor(Anchor *anchor)
 
 #define MEM_search_FAST 2
 #define MIN_MEM_LEN_FAST 21
-void fast_classify(
+int fast_classify(
 		DA_IDX* idx,
 		SEARCH_DIR *s_d,//search direction
 		uint32_t read_len, cly_r *results)
@@ -1247,6 +1247,7 @@ void fast_classify(
 		for(Anchor * anc_c = a_b; anc_c < a_e; anc_c++)
 			anc_c->anchor_useless = (anc_c->a_m.score < top_score)?true:false;
 	}
+	return super_repeat[0];
 }
 
 #define MEM_search_SLOW 8
@@ -2767,15 +2768,15 @@ void classify_seq(kseq_t *read, DA_IDX* idx, cly_r *results, Classify_buff_pool 
 	both_direction = ((search_dir[0].total_score - search_dir[1].total_score) <= (search_dir[0].total_score >> 3))?true:false;
 #endif
 	//FAST MODE-loop1
-	fast_classify(idx, search_dir, read_len, results);//fast mode for error rate < 0.2
+	int super_repeat = fast_classify(idx, search_dir, read_len, results);//fast mode for error rate < 0.2
 	if(both_direction)
-		fast_classify(idx, search_dir + 1, read_len, results);//fast mode for error rate < 0.2
+		super_repeat += fast_classify(idx, search_dir + 1, read_len, results);//fast mode for error rate < 0.2
 	resolve_tree(results);
 	//slow mode: loop2
 	int run_slow_mode = false;
 	if(results->hit.n <= 0)//when no results
 		run_slow_mode = true;
-	else if(results->hit.a[0].anchor_number < 5 && results->anchor_v.n < 100)//when not sufficient anchors
+	else if(results->hit.a[0].anchor_number < 5 && super_repeat < 3)//when not sufficient anchors
 	{
 		run_slow_mode = true;
 		//run in 2nd Generation reads mode
@@ -2790,7 +2791,7 @@ void classify_seq(kseq_t *read, DA_IDX* idx, cly_r *results, Classify_buff_pool 
 		resolve_tree(results); //SLOW MODE for error rate over an0.2
 #ifndef CONSIDER_BOTH_ORIENTATION
 		////SLOW MODE-loop3
-		if(both_direction || results->hit.n <= 0 || (results->hit.a[0].anchor_number < 5  && results->anchor_v.n < 100) )
+		if(both_direction || results->hit.n <= 0 || (results->hit.a[0].anchor_number < 5  && super_repeat< 3) )
 		{
 			slow_classify(idx, search_dir + 1, read_len, results);
 			resolve_tree(results);
