@@ -756,6 +756,7 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 			}
 			if(super_repeat[1] > 2)//random select when super repeat
 			{
+				duplicate = true;
 				int block_len = r_p_e - r_p_s;
 				int random_begin = (anchor_v->n*71) % block_len;
 				r_p_s += random_begin;//get 10 random results (by current anchor_v->n)
@@ -767,7 +768,10 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 				r_p_e += 0;
 			}//delete all when not-super repeat nor beginning
 			else
+			{
 				r_p_e = r_p_s;
+				return 50;
+			}
 		}
 		//if(r_p_e - r_p_s > 40 && anchor_v->n > 30)//ignore results when too many of then
 		//	r_p_e = r_p_s;
@@ -2561,9 +2565,9 @@ void delete_small_score_rst(
 {
 	if(results->hit.n == 0)
 		return;
-	if(results->hit.n > 150)//delete result with only one anchor
+	if(results->hit.n > 200)//delete result with only one anchor
 	{
-		int rst_num = 150;//delete result without top anchor
+		int rst_num = 200;//delete result without top anchor
 		for(;rst_num < results->hit.n && results->hit.a[rst_num].sum_score > 50 ;rst_num++);
 		results->hit.n = rst_num;
 	}
