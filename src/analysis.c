@@ -61,6 +61,7 @@ typedef struct {
 	char rank[20];
 }TAXONOMY_rank;
 
+int max_tid_global = 0;
 //------------------------------------------TAX TREE-----------------------------------------//
 #define MAX_BUFF_LEN 10000000//1000K
 //store taxonomy tree in list, with rank info; return max TID
@@ -85,6 +86,7 @@ int taxonTree_rank(const char *taxonomyNodesPath,TAXONOMY_rank ** taxonomyTree_)
 	fp = xopen(taxonomyNodesPath,"r");
 	//step 3: store
 	max_tid += 1000000;
+	max_tid_global = max_tid;
 	taxonomyTree = (TAXONOMY_rank*)malloc(sizeof(TAXONOMY_rank)*(max_tid + 1));
 	for(uint32_t i = 0; i <= max_tid; i++)
 		taxonomyTree[i].p_tid = MAX_uint32_t;
@@ -303,8 +305,6 @@ void dump_sam(char * SAM_file_name)
 		//write MAF
 		fwrite(&temp_rst,sizeof(RST),1,RST_file);
 		record_num++;
-		if(record_num % 1000000 == 0)
-			fprintf(stderr,"%d\n",record_num);
 	}
 	//step4: close files
 	fclose(SAM_file);
@@ -375,8 +375,6 @@ void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
-		if(record_num % 1000000 == 0)
-			fprintf(stderr,"%d\n",record_num);
 		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
 				temp_rst.read_name,
 				temp_rst.isClassify,
@@ -442,8 +440,6 @@ void dump_des_PAF_file(char * PAF_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
-		if(record_num % 1000000 == 0)
-			fprintf(stderr,"%d\n",record_num);
 		temp_rst.isClassify = 'C';
 		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
 				temp_rst.read_name,
@@ -646,7 +642,6 @@ int getOnecenSAM(FILE * SAM_file, char *buff, RST * rst)
 //USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
 void dump_CEN_file(char * SAM_file_name, char*dump_file_name)
 {
-	fprintf(stderr,"Dump_sam begin\n");
 	//SAM to RST
 	//step1: OPEN files
 	FILE * SAM_file = xopen(SAM_file_name,"r");
@@ -661,8 +656,6 @@ void dump_CEN_file(char * SAM_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
-		if(record_num % 1000000 == 0)
-			fprintf(stderr,"%d\n",record_num);
 		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
 				temp_rst.read_name,
 				temp_rst.isClassify,
@@ -721,8 +714,6 @@ void dump_KAI_file(char * SAM_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
-		if(record_num % 1000000 == 0)
-			fprintf(stderr,"%d\n",record_num);
 		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
 				temp_rst.read_name,
 				temp_rst.isClassify,
@@ -826,14 +817,33 @@ uint32_t get_tax_by_rank(TAXONOMY_rank * taxonomyTree, uint32_t tax, char *rank)
 		if(c_tax <= 1 || c_tax == 0xffffffff)
 			break;
 	}
-	if(c_tax == 0xffffffff)
-		fprintf(stderr, "UN ");
+	//if(c_tax == 0xffffffff)
+	//	fprintf(stderr, "");
 	return rst_tax_id;
+}
+
+//-----------------------------------------ANA TAX-----------------------------------------//
+//compare whether tax A is the ancestors node of tax B
+bool compare_tax(TAXONOMY_rank * taxonomyTree, uint32_t tax_A, uint32_t tax_B)
+{
+	uint32_t c_tax = tax_B;
+	//get species name
+	while(1){
+		if(c_tax == tax_A)
+			return true;
+		c_tax = taxonomyTree[c_tax].p_tid;
+		if(c_tax <= 1 || c_tax == 0xffffffff)
+			break;
+	}
+	//if(c_tax == 0xffffffff)
+	//	fprintf(stderr, "");
+	return false;
 }
 
 //compare
 //USAGE: deSPI3rd cmp cmp_minimap [rst file name] [maf file name] [tax_file_name]
 //rank equal one of "species"/"genus"/"superkingdom"/"family"/"order"/"class"/"phylum"
+//when rank is null, the program will determine the rank automatically
 #define ANA_SHOW_TITLE false
 #define SHOW_DETAIL 1
 void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, char *rank)
@@ -845,6 +855,9 @@ void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, cha
 
 	//PART 2:get right tax
 	//uint32_t right_tax = strtoul(argv[2],0,10);
+	bool no_rank = false;
+	if(strcmp(rank, "null") == 0)
+		no_rank = true;
 
 	//PART 3:load taxonomyTree
 	//char * tax_file_name = argv[3];
@@ -883,8 +896,16 @@ void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, cha
 				continue;
 		}
 
-		c_tax = get_tax_by_rank(taxonomyTree, rst.tid, rank);
-		if(right_tax == c_tax){
+		bool right_classify = false;
+		if(no_rank)
+			right_classify = compare_tax(taxonomyTree, right_tax, rst.tid);
+		else
+		{
+			c_tax = get_tax_by_rank(taxonomyTree, rst.tid, rank);
+			if(right_tax == c_tax)
+				right_classify = true;
+		}
+		if(right_classify == true){
 			right_alignment = true;
 			right_aligment_first++;
 			if(SHOW_DETAIL)
@@ -904,8 +925,19 @@ void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, cha
 			{
 				if(right_alignment == true)
 					continue;
-				c_tax = get_tax_by_rank(taxonomyTree, rst.tid, rank);
-				if(right_tax == c_tax){
+
+				bool right_classify = false;
+				if(no_rank)
+					right_classify = compare_tax(taxonomyTree, right_tax, rst.tid);
+				else
+				{
+					c_tax = get_tax_by_rank(taxonomyTree, rst.tid, rank);
+					if(right_tax == c_tax)
+						right_classify = true;
+				}
+
+				if(right_classify)
+				{
 					right_alignment = true;
 					right_aligment_second++;
 					if(SHOW_DETAIL)
@@ -1077,13 +1109,12 @@ void ana_meta(char * rst_file_name, char * tax_file_name)
 	//calculate middle nodes
 	for(int i = 0; i < rst_num; i++)
 	{
-
 		uint32_t c_tid = sort[i].tid;
 		node_table[sort[i].tid].weight += node_count[sort[i].tid];
 		while(1)
 		{
 			uint32_t p_tid = taxonomyTree[c_tid].p_tid;
-			if(p_tid < 1)//over root node
+			if(p_tid < 1 || p_tid == 4294967295)//over root node
 				break;
 			node_table[p_tid].weight += node_count[sort[i].tid];//add weight for p_tid
 			//store p_tid->c_tid
@@ -1212,6 +1243,32 @@ void ana_meta_des(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
+void ana_meta_cen(char * sam_file_name, char * tax_file_name)
+{
+	char temp_file_name[1024];
+	strcpy(temp_file_name, sam_file_name);
+	strcat(temp_file_name, ".temp");
+	//temp file
+	//dump des sam
+	dump_CEN_file(sam_file_name, temp_file_name);
+	//analysis
+	ana_meta(temp_file_name, tax_file_name);
+	xrm(temp_file_name);
+}
+
+void ana_meta_kai(char * sam_file_name, char * tax_file_name)
+{
+	char temp_file_name[1024];
+	strcpy(temp_file_name, sam_file_name);
+	strcat(temp_file_name, ".temp");
+	//temp file
+	//dump des sam
+	dump_KAI_file(sam_file_name, temp_file_name);
+	//analysis
+	ana_meta(temp_file_name, tax_file_name);
+	xrm(temp_file_name);
+}
+
 void ana_tax_des(char * sam_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
 {
 	char temp_file_name[1024];
@@ -1260,6 +1317,113 @@ void ana_tax_KAI(char * kai_file_name, uint32_t right_tax, char * tax_file_name 
 	ana_tax(temp_file_name, right_tax, tax_file_name, rank);
 	xrm(temp_file_name);
 }
+
+/*******************************************
+BLASTn tabular output format 6
+1. 	 qseqid 	 query (e.g., gene) sequence id
+2. 	 sseqid 	 subject (e.g., reference geome) sequence id
+3. 	 pident 	 percentage of identical matches
+4. 	 length 	 alignment length
+5. 	 mismatch 	 number of mismatches
+6. 	 gapopen 	 number of gap openings
+7. 	 qstart 	 start of alignment in query
+8. 	 qend 	 end of alignment in query
+9. 	 sstart 	 start of alignment in subject
+10. 	 send 	 end of alignment in subject
+11. 	 evalue 	 expect value
+12. 	 bitscore 	 bit score
+**************************************************************************/
+
+typedef struct blast_RST{
+	char 		read_name[50];
+	uint32_t 	mapping_length;
+	float 		indentify;
+	int 		read_st;
+	int 		read_ed;
+}blast_RST;//24byte
+
+//------------------------------------------KAI-----------------------------------------//
+int getOneBlast(FILE * blast_file, char *buff, blast_RST * rst)
+{
+	size_t max_l = MAX_BUFF_LEN;
+	int read_L = 0;
+	read_L = getline(&buff,&max_l,blast_file);
+	if(read_L <= 0)
+		return -1;
+	sscanf(buff,
+			"%s\t" 	//1
+			"%*s\t"	//2
+			"%f"	//3
+			"%d"	//4
+			"%*d"	//5
+			"%*d"	//6
+			"%d"	//7
+			"%d"	//8
+			"%*d"	//9
+			"%*d"	//10
+			"%*f"	//11
+			"%*d",	//12
+			rst->read_name,
+			&(rst->indentify),
+			&(rst->mapping_length),
+			&(rst->read_st),
+			&(rst->read_ed)
+			);
+	return 0;
+}
+void ana_BLASTN(char * blastn_file_name)
+{
+	//step1: OPEN files
+	FILE * BLASTN_file = xopen(blastn_file_name,"r");
+	char *buff = (char*)malloc(MAX_BUFF_LEN);
+	//step3: store SAM into RST
+	uint32_t record_num = 0;
+	blast_RST rst = {0};
+	blast_RST old_rst = {0};
+	uint64_t total_length = 0;
+	int st_l[1000];
+	int ed_l[1000];
+	int region_n = 0;
+	while(1){
+
+		//get SAM
+		if(getOneBlast(BLASTN_file, buff, &rst) < 0)
+			break;
+		if(strcmp(rst.read_name, old_rst.read_name) != 0)//new reads
+		{
+			st_l[0] = rst.read_st;
+			ed_l[0] = rst.read_ed;
+			region_n = 1;
+			//add length
+			total_length += rst.mapping_length;
+		}
+		else//old reads
+		{
+			int i = 0;
+			for(; i < region_n; i++)//search all regions
+				if(rst.read_st <= ed_l[i] && rst.read_ed >= st_l[i])
+					break;
+			if(i == region_n)
+			{
+				//store new block
+				{
+					st_l[region_n] = rst.read_st;
+					ed_l[region_n] = rst.read_ed;
+					region_n++;
+				}
+				//add length
+				total_length += rst.mapping_length;
+			}
+			continue;
+		}
+		record_num++;
+		old_rst = rst;
+	}
+	free(buff);
+	fclose(BLASTN_file);
+	fprintf(stderr, "%s\t %d\t %ld\n", blastn_file_name, record_num, total_length);
+}
+
 
 //---------------------------------ANALYSIS with filter----------------------------------------------//
 //return 'P' when pass, return 'F' when fail
@@ -1535,15 +1699,15 @@ void count_base(char * fastq_file_name)
 	kstream_t *_fp = ks_init(fp);
 	kseq_t seq = {0};
 	seq.f = _fp;
-	int total_length = 0;
-	int read_number = 0;
+	uint64_t total_length = 0;
+	uint64_t read_number = 0;
 	while( kseq_read(&seq) >= 0)
 	{
 		read_number ++;
 		total_length += seq.seq.l;
 	}
 	gzclose(fp);
-	fprintf(stderr, "%s %d %d\n", fastq_file_name, read_number, total_length);
+	fprintf(stderr, "%s read number: %ld base number %ld ( %f Mbp)\n", fastq_file_name, read_number, total_length, (float)total_length/1000000);
 }
 
 int is_low_complex(char * st, int len)
@@ -1633,6 +1797,20 @@ void pacbio_filter(char * fastq_file_name)
 	fprintf(stderr, "file name: %s total number: %d filtered number: %d\n", fastq_file_name, read_number, filterd_read);
 }
 
+void fastq_to_fasta(char *fastq_file)
+{
+	gzFile fp = xzopen(fastq_file, "r");
+	kstream_t *_fp = ks_init(fp);
+
+	kseq_t temp = {0};
+	temp.f = _fp;
+	while( kseq_read(&temp) >= 0)
+	{
+		printf(">%s %s\n", temp.name.s, temp.comment.s);
+		printf("%s\n", temp.seq.s);
+	}
+}
+
 #define ANALYSIS_MAIN_COMMAND "analysis"
 static int cmp_usage()
 {
@@ -1645,7 +1823,7 @@ static int cmp_usage()
 	fprintf(stderr, "    %s ana_meta    [SAM_file.sam] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
 	fprintf(stderr, "    %s ana_species [SAM_file.sam] [species taxonomy] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
 	fprintf(stderr, "    %s ana_genus   [SAM_file.sam] [genus taxonomy]   [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
-	fprintf(stderr, "    %s ana_rank    [SAM_file.sam] [XXX taxonomy] [node.dmp] [rank]\n", ANALYSIS_MAIN_COMMAND);
+	fprintf(stderr, "    %s ana_sam     [SAM_file.sam] [XXX taxonomy] [node.dmp] [rank]\n", ANALYSIS_MAIN_COMMAND);
 	fprintf(stderr, "  Basic:\n");
 	fprintf(stderr, "    [SAM_file.sam]  FILE  Classify file generated from \"classify\" command\n");
 	fprintf(stderr, "    [XXX taxonomy]  INT   taxonomy you want to test in the result file\n");
@@ -1664,22 +1842,26 @@ int simDataTest(int argc, char *argv[])
 {
 	if		(argc <= 1)						  			{cmp_usage();}
 	else if	(0 == strcmp(argv[1], "ana_meta"))			{ana_meta_des(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "ana_meta_kai"))		{ana_meta_kai(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "ana_meta_cen"))		{ana_meta_cen(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_species"))		{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "species");}
 	else if	(0 == strcmp(argv[1], "ana_genus"))			{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
-	else if	(0 == strcmp(argv[1], "ana_rank"))			{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
 	else if	(0 == strcmp(argv[1], "mark_genus"))		{mark_SAM(		argv[2], argv[3], "genus");}
 	else if	(0 == strcmp(argv[1], "ana_meta_rst"))		{ana_meta(		argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_species_rst"))	{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "species");}
 	else if	(0 == strcmp(argv[1], "ana_genus_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
 	else if	(0 == strcmp(argv[1], "ana_rank_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
-	else if	(0 == strcmp(argv[1], "ana_genus_paf"))		{ana_tax_PAF(	argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
-	else if	(0 == strcmp(argv[1], "ana_genus_cen"))		{ana_tax_CEN(	argv[2], strtoul(argv[3],0,10), argv[4], "genus");}//centrifuge
-	else if	(0 == strcmp(argv[1], "ana_genus_kai"))		{ana_tax_KAI(	argv[2], strtoul(argv[3],0,10), argv[4], "genus");}//kaiju
+	else if	(0 == strcmp(argv[1], "ana_sam"))			{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
+	else if	(0 == strcmp(argv[1], "ana_paf"))			{ana_tax_PAF(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
+	else if	(0 == strcmp(argv[1], "ana_cen"))			{ana_tax_CEN(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}//centrifuge
+	else if	(0 == strcmp(argv[1], "ana_kai"))			{ana_tax_KAI(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}//kaiju
+	else if	(0 == strcmp(argv[1], "ana_BLASTN"))		{ana_BLASTN(	argv[2]);}//kaiju
 	else if	(0 == strcmp(argv[1], "ana_dump_filter"))	{ana_tax_DUMP_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "ana_sam_filter"))	{ana_tax_SAM_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "ana_paf_filter"))	{ana_tax_PAF_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "read_ana"))			{count_base(	argv[2]);}
 	else if	(0 == strcmp(argv[1], "pacbio_filter"))		{pacbio_filter(	argv[2]);}
+	else if	(0 == strcmp(argv[1], "fastq_to_fasta"))	{fastq_to_fasta(	argv[2]);}
 	else if	(0 == strcmp(argv[1], "dump_sam"))			{ASSERT_PARA(3);dump_sam(argv[2]);}
 	else if	(0 == strcmp(argv[1], "dump_maf"))			{ASSERT_PARA(3);dump_maf(argv[2]);}
 	else if	(0 == strcmp(argv[1], "dump_des"))			{ASSERT_PARA(3);dump_des(argv[2]);}
