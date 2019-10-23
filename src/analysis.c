@@ -32,13 +32,15 @@
 #include "lib/utils.h"
 #include "lib/kvec.h"
 
+#define READ_NAME_LEN 50
+
 typedef struct {
 	uint32_t 	tid;
-	char 		read_name[50];
+	char 		read_name[READ_NAME_LEN];
 } MAF;//8byte
 
 typedef struct {
-	char 		read_name[50];
+	char 		read_name[READ_NAME_LEN];
 	char 		isClassify;
 	uint32_t 	tid;
 	uint32_t 	read_length;
@@ -46,7 +48,7 @@ typedef struct {
 } RST;//24byte
 
 typedef struct {
-	char 		read_name[50];
+	char 		read_name[READ_NAME_LEN];
 	uint32_t 	true_tid;
 	char 		true_rank[20];
 	uint32_t 	cly_tid;
@@ -868,7 +870,7 @@ void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, cha
 	int wrong_alignment = 0;
 	int total_read_number = 0;
 	int umapped_read_number = 0;
-	char old_read_name[30] = {0};
+	char old_read_name[READ_NAME_LEN] = {0};
 	bool right_alignment = 0;
 	int right_aligment_first = 0;
 	int right_aligment_second =0;
@@ -1057,7 +1059,7 @@ void ana_meta(char * rst_file_name, char * tax_file_name)
 
 	// = {"root", 0. "root", 0, NULL, NULL}
 	int total_read_number = 0;
-	char old_read_name[30] = {0};
+	char old_read_name[READ_NAME_LEN] = {0};
 	RST rst;
 
 	//count all PRIMARY tax
@@ -1476,7 +1478,7 @@ void ana_tax_with_filter(char * rst_file_name, uint32_t right_tax, char * tax_fi
 	int wrong_alignment = 0;
 	int total_read_number = 0;
 	int umapped_read_number = 0;
-	char old_read_name[30] = {0};
+	char old_read_name[READ_NAME_LEN] = {0};
 	bool right_alignment = 0;
 	int right_aligment_first = 0;
 	int right_aligment_second =0;
