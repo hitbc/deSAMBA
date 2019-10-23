@@ -34,11 +34,11 @@
 
 typedef struct {
 	uint32_t 	tid;
-	char 		read_name[32];
+	char 		read_name[50];
 } MAF;//8byte
 
 typedef struct {
-	char 		read_name[30];
+	char 		read_name[50];
 	char 		isClassify;
 	uint32_t 	tid;
 	uint32_t 	read_length;
@@ -46,7 +46,7 @@ typedef struct {
 } RST;//24byte
 
 typedef struct {
-	char 		read_name[32];
+	char 		read_name[50];
 	uint32_t 	true_tid;
 	char 		true_rank[20];
 	uint32_t 	cly_tid;
