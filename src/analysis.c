@@ -653,13 +653,26 @@ int getOnecenSAM(FILE * SAM_file, char *buff, RST * rst)
 	tokens = strtok(NULL,"\t");
 	rst->tid = strtoul(tokens,NULL,10);
 	rst->MAPQ = 0;
+	rst->read_length = 0;
 	if(rst->tid == 0) {
 		rst->isClassify = 'U';
 	}
 	else{
 		rst->isClassify = 'C';
+		//ignore 0
+		tokens = strtok(NULL,"\t");
+		//ignore 0
+		tokens = strtok(NULL,"\t");
+		//ignore *0
+		tokens = strtok(NULL,"\t");
+		//ignore cid|***
+		tokens = strtok(NULL,"\t");
+		//ignore 0
+		tokens = strtok(NULL,"\t");
+		//get read length
+		tokens = strtok(NULL,"\t");
+		rst->read_length = strtoul(tokens,NULL,10);
 	}
-	rst->read_length = 0;
 	return 0;
 }
 
@@ -1409,6 +1422,19 @@ void ana_meta_des_base(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
+void ana_meta_cen_base(char * sam_file_name, char * tax_file_name)
+{
+	char temp_file_name[1024];
+	strcpy(temp_file_name, sam_file_name);
+	strcat(temp_file_name, ".temp");
+	//temp file
+	//dump des sam
+	dump_CEN_file(sam_file_name, temp_file_name);
+	//analysis
+	ana_meta_base(temp_file_name, tax_file_name);
+	xrm(temp_file_name);
+}
+
 void ana_meta_cen(char * sam_file_name, char * tax_file_name)
 {
 	char temp_file_name[1024];
@@ -2009,6 +2035,7 @@ int simDataTest(int argc, char *argv[])
 	if		(argc <= 1)						  			{cmp_usage();}
 	else if	(0 == strcmp(argv[1], "ana_meta"))			{ana_meta_des(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_base"))		{ana_meta_des_base(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "	"))	{ana_meta_cen_base(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_kai"))		{ana_meta_kai(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_cen"))		{ana_meta_cen(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_species"))		{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "species");}
