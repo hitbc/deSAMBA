@@ -118,7 +118,10 @@ Increasing "-l" and "-s" options will increase accuracy but decrease sensitivity
 ## Run analysis
 ```
 ./download taxnomy #download node.dmp
+#analysis (by read number)
 ./bin/deSAMBA analysis ana_meta ./result.sam ./nodes.dmp 
+#analysis (by read number)
+./bin/deSAMBA analysis ana_meta_base ./result.sam ./nodes.dmp 
 ```
 ## Demo data
 
@@ -133,7 +136,7 @@ bash ./build-index ./demo/viral-gs.fa ./demo_index
 #classify
 ./bin/deSAMBA classify -t 4 ./demo_index ./demo/ERR1050068.fastq -o ./ERR1050068.sam
 #analysis
-./bin/deSAMBA analysis ana_meta ./ERR1050068.sam ./demo/nodes.dmp
+./bin/deSAMBA analysis ana_meta_base ./ERR1050068.sam ./demo/nodes.dmp
 ```
 
 
