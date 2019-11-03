@@ -117,8 +117,8 @@ Increasing "-l" and "-s" options will increase accuracy but decrease sensitivity
 
 ## Run analysis
 The analyzer output result in taxonomy tree format. We provide two modes to analysis the results. 
-One is analysising by base number. The analyzer counts all base pairs in each taxonomy, then divide it by total mapped base number. 
-The other is by read number. The analyzer counts all read, the divide by total read number(include unmapped reads).
+One is analysising by base numbers. The analyzer counts all base pairs in each taxonomy, then divides the results by total mapped base numbers. 
+The other is by read numbers. The analyzer counts all reads int each taxonomy, then divides the results by total read number(include unmapped reads).
 ```
 ./download taxnomy #download node.dmp
 #analysis (by base pair number)
