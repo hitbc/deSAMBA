@@ -104,7 +104,7 @@ bash build-index [file].fa ./index_dir
     -l, INT         minimum matching length(will be ignored when classifying short NGS reads)[170]
     -r, INT         max Output number of secondary alignments[5]
     -o, FILE        output results into file [stdout]
-    -s, FILE        MIN score(the number of 9-mer match)[64]
+    -s, FILE        MIN score(count by the number of 9-mer matches)[64]
     -f, STR         output format, one of:
                     - SAM: SAM without SEQ and QUAL, default
                     - SAM_FULL: normal SAM
@@ -115,10 +115,21 @@ bash build-index [file].fa ./index_dir
 Increasing "-l" and "-s" options will increase accuracy but decrease sensitivity.
 [read.fastq] can be long noisy reads(error rate < 25%) or short NGS reads.
 
+SAM format results contain " [read name] [flag] [reference name] [position in referece] [MAPQ] [CIGAR]" in each record line.
+
+
+deSAMBA may out put "SECONDARY" or "SUPPLEMENTARY" results when read is mapped to more than one reference place. 
+
+CIGAR part of result only contains 'M', 'S', 'H' for matching, soft clip and hard clip, and 'X', 'I' and 'D' are all combined into 'M'. "AS:i:" part in SAM format results means alignment score,  which is counted by the number of 9-mer matches.
+
 ## Run analysis
 The analyzer output result in taxonomy tree format. We provide two modes to analysis the results. 
+
 One is analysising by base numbers. The analyzer counts all base pairs in each taxonomy, then divides the results by total mapped base numbers. 
+
 The other is by read numbers. The analyzer counts all reads int each taxonomy, then divides the results by total read number(include unmapped reads).
+
+When one read mapped to more than one positions in references, only "PRIMARY" result will be used to analysis.
 ```
 ./download taxnomy #download node.dmp
 #analysis (by base pair number)
