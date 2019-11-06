@@ -45,7 +45,8 @@ typedef struct {
 	uint32_t 	tid;
 	uint32_t 	read_length;
 	uint8_t 	MAPQ;
-} RST;//24byte
+	uint32_t 	score;
+}RST;//24byte
 
 typedef struct {
 	char 		read_name[READ_NAME_LEN];
@@ -67,7 +68,7 @@ int max_tid_global = 0;
 //------------------------------------------TAX TREE-----------------------------------------//
 #define MAX_BUFF_LEN 10000000//1000K
 //store taxonomy tree in list, with rank info; return max TID
-int taxonTree_rank(const char *taxonomyNodesPath,TAXONOMY_rank ** taxonomyTree_)
+static int taxonTree_rank(const char *taxonomyNodesPath,TAXONOMY_rank ** taxonomyTree_)
 {
 	TAXONOMY_rank * taxonomyTree;
 	FILE *fp = xopen(taxonomyNodesPath,"r");
@@ -115,49 +116,49 @@ int taxonTree_rank(const char *taxonomyNodesPath,TAXONOMY_rank ** taxonomyTree_)
 	*taxonomyTree_ = taxonomyTree;
 	return max_tid;
 }
-
-//return distance, and store the LCA in LCA
-int TID_distance(uint32_t tid1, uint32_t tid2, TAXONOMY_rank * taxonomy, uint32_t *LCA)
-{
-	//get distance
-	int distance1 = 0;//distance between tid1 and LCA
-	int distance2 = 0;//distance between tid1 and LCA
-	while(1)
-	{
-		if(tid1 == 0)//stop when search to the end, it`s a fatal wrong
-			break;
-		//reset distance2
-		distance2 = 0;
-		uint32_t current_tid2 = tid2;
-		while(1)
-		{
-			if(current_tid2 == 0)//stop when search to the end
-				break;
-			if(tid1 == current_tid2){//return when found LCA
-				*LCA = tid1;
-				return distance1 + distance2;
-			}
-			//get parent node
-			current_tid2 = taxonomy[current_tid2].p_tid;
-			//add distance
-			distance2++;
-		}
-		//get parent node
-		tid1 = taxonomy[tid1].p_tid;
-		//add distance
-		distance1++;
-	}
-	if(tid2 == 0) {*LCA = 0; return distance1;}
-	xassert(0,"[TID_distance]:FATAL WRONG, no LCA are found");
-	return 0;
-}
+//
+////return distance, and store the LCA in LCA
+//static int TID_distance(uint32_t tid1, uint32_t tid2, TAXONOMY_rank * taxonomy, uint32_t *LCA)
+//{
+//	//get distance
+//	int distance1 = 0;//distance between tid1 and LCA
+//	int distance2 = 0;//distance between tid1 and LCA
+//	while(1)
+//	{
+//		if(tid1 == 0)//stop when search to the end, it`s a fatal wrong
+//			break;
+//		//reset distance2
+//		distance2 = 0;
+//		uint32_t current_tid2 = tid2;
+//		while(1)
+//		{
+//			if(current_tid2 == 0)//stop when search to the end
+//				break;
+//			if(tid1 == current_tid2){//return when found LCA
+//				*LCA = tid1;
+//				return distance1 + distance2;
+//			}
+//			//get parent node
+//			current_tid2 = taxonomy[current_tid2].p_tid;
+//			//add distance
+//			distance2++;
+//		}
+//		//get parent node
+//		tid1 = taxonomy[tid1].p_tid;
+//		//add distance
+//		distance1++;
+//	}
+//	if(tid2 == 0) {*LCA = 0; return distance1;}
+//	xassert(0,"[TID_distance]:FATAL WRONG, no LCA are found");
+//	return 0;
+//}
 
 //------------------------------------------RST-----------------------------------------//
 
 //get one line of RST file, store result in RST
 //return -1 when reach the end of the file
 //buff pool are needed, "char *buff = (char*)malloc(50000);"
-int getOneRST(FILE * RST_file,RST * rst)
+static int getOneRST(FILE * RST_file, RST * rst)
 {
 	size_t max_l = 1024;
 	char static_BUFF[1024];
@@ -178,10 +179,16 @@ int getOneRST(FILE * RST_file,RST * rst)
 		rst->MAPQ = 0;
 	else
 		rst->MAPQ = strtoul(tokens,NULL, 10);
+
+	tokens = strtok(NULL,"\t");
+	if(tokens == 0)
+		rst->score = 0;
+	else
+		rst->score = strtoul(tokens,NULL, 10);
 	return 0;
 }
 //------------------------------------------SAM-----------------------------------------//
-int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
+static int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
 {
 	size_t max_l = MAX_BUFF_LEN;
 	char *tokens;
@@ -200,6 +207,7 @@ int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
 	tokens = strtok(NULL,"\t");
 	//get refNAME
 	rst->read_length = 0;
+	rst->score = 0;
 	tokens = strtok(NULL,"\t");
 	if(tokens[0] == '*') {
 		rst->isClassify = 'U';
@@ -217,6 +225,28 @@ int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
 		//get CIGAR
 		tokens = strtok(NULL,"\t");
 		char * CIGAR = tokens;
+		//get *
+		tokens = strtok(NULL,"\t");
+		//get 0
+		tokens = strtok(NULL,"\t");
+		//get 0
+		tokens = strtok(NULL,"\t");
+		//get SEQ
+		tokens = strtok(NULL,"\t");
+		//get QUAL
+		tokens = strtok(NULL,"\t");
+		//with other label
+		//get AS
+		tokens = strtok(NULL,":");
+		//if(tokens != NULL && tokens[0] == 'N' && tokens[1] == 'M')//code for minimap2
+		if(tokens != NULL && tokens[0] == 'A' && tokens[1] == 'S')//code for deSAMBA
+		{
+			//get i
+			tokens = strtok(NULL,":");
+			//get score
+			tokens = strtok(NULL,"\t");
+			rst->score = strtoul(tokens,NULL,10);
+		}
 		//for the ref name part
 		{
 			//ignore 'tid|'
@@ -252,45 +282,47 @@ int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
 
 //compare two string, but when one char are number[0~9], it bigger than any other char
 //used to sort the string of read name
-int strcmp_name(const void *a_, const void *b_){
-	char * s1 = (char*)a_; char * s2 = (char*)b_;
-	for(;*s1 == *s2 && *s1 != 0;s1++,s2++);
-	int s1_is_num = 0, s2_is_num = 0;
-	if(*s1 <= '9' && *s1 >= '0')
-		s1_is_num = 1;
-	if(*s2 <= '9' && *s2 >= '0')
-		s2_is_num = 1;
-	if(s1_is_num == 1 && s2_is_num == 0)//a is number and b not
-		return 1;
-	if(s1_is_num == 0 && s2_is_num == 1)//a is number and b not
-		return - 1;
-	if(s1_is_num == 0 && s2_is_num == 0)//both not
-		return *s1 - *s2;
-	//both is number
-	//copy to new memory
-	char s1_[1024];
-	char s2_[1024];
-	strcpy(s1_ + 1,s1);
-	strcpy(s2_ + 1,s2);
-	s1_[0] = '1';
-	s2_[0] = '1';
-	int int_a = atoi(s1_);
-	int int_b = atoi(s2_);
-	return int_a - int_b;
-}
+//static int strcmp_name(const void *a_, const void *b_)
+//{
+//	char * s1 = (char*)a_; char * s2 = (char*)b_;
+//	for(;*s1 == *s2 && *s1 != 0;s1++,s2++);
+//	int s1_is_num = 0, s2_is_num = 0;
+//	if(*s1 <= '9' && *s1 >= '0')
+//		s1_is_num = 1;
+//	if(*s2 <= '9' && *s2 >= '0')
+//		s2_is_num = 1;
+//	if(s1_is_num == 1 && s2_is_num == 0)//a is number and b not
+//		return 1;
+//	if(s1_is_num == 0 && s2_is_num == 1)//a is number and b not
+//		return - 1;
+//	if(s1_is_num == 0 && s2_is_num == 0)//both not
+//		return *s1 - *s2;
+//	//both is number
+//	//copy to new memory
+//	char s1_[1024];
+//	char s2_[1024];
+//	strcpy(s1_ + 1,s1);
+//	strcpy(s2_ + 1,s2);
+//	s1_[0] = '1';
+//	s2_[0] = '1';
+//	int int_a = atoi(s1_);
+//	int int_b = atoi(s2_);
+//	return int_a - int_b;
+//}
 
 //all char that are more than '9' are use less than '9'
-int cmp_rst(const void *a_, const void *b_){
-	RST *a = (RST *) a_, *b= (RST *) b_;
-	return strcmp_name(a->read_name, b->read_name);
-}
-int cmp_maf(const void *a_, const void *b_){
-	MAF *a = (MAF *) a_, *b= (MAF *) b_;
-	return strcmp_name(a->read_name, b->read_name);
-}
+//static int cmp_rst(const void *a_, const void *b_){
+//	RST *a = (RST *) a_, *b= (RST *) b_;
+//	return strcmp_name(a->read_name, b->read_name);
+//}
+
+//static int cmp_maf(const void *a_, const void *b_){
+//	MAF *a = (MAF *) a_, *b= (MAF *) b_;
+//	return strcmp_name(a->read_name, b->read_name);
+//}
 
 // ignore the @SQ and @PG line
-void skip_sam_head(FILE * SAM_file, char *buff)
+static void skip_sam_head(FILE * SAM_file, char *buff)
 {
 	size_t max_l = MAX_BUFF_LEN;
 	//step2: ignore the @SQ and @PG line
@@ -304,84 +336,84 @@ void skip_sam_head(FILE * SAM_file, char *buff)
 		}
 	}
 }
+//
+////store minimap SAM in RST format, only the result with the best MAPQ are stored
+////USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
+//static void dump_sam(char * SAM_file_name)
+//{
+//	fprintf(stderr,"Dump_sam begin\n");
+//	//SAM to RST
+//	//step1: OPEN files
+//	char   RST_file_name[1024];
+//	strcpy(RST_file_name, SAM_file_name); strcat(RST_file_name, ".dump.tmp");
+//	FILE * SAM_file = xopen(SAM_file_name,"r");
+//	FILE * RST_file = xopen(RST_file_name,"wb");
+//	char *buff = (char*)malloc(MAX_BUFF_LEN);
+//	//step2: ignore the @SQ and @PG line
+//	skip_sam_head(SAM_file, buff);
+//
+//	//step3: store SAM into RST
+//	uint32_t record_num = 0;
+//	RST temp_rst;
+//	while(1){
+//		//get SAM
+//		if(getOneSAM(SAM_file, buff, &temp_rst) < 0)
+//			break;
+//		//write MAF
+//		fwrite(&temp_rst,sizeof(RST),1,RST_file);
+//		record_num++;
+//	}
+//	//step4: close files
+//	fclose(SAM_file);
+//	fclose(RST_file);
+//	//step5: reload file and sort
+//	FILE * rst_file = xopen(RST_file_name, "rb");
+//	RST * rst = (RST *)xmalloc(sizeof(RST)*record_num);
+//	xread(rst,sizeof(RST),record_num,rst_file);
+//	qsort(rst,record_num,sizeof(RST),cmp_rst);
+//	fclose(rst_file);
+//	//step6: delete results that is not the best MAPQ
+//	RST * uni_rst = (RST *)xmalloc(sizeof(RST)*record_num);
+//	int uni_record_num = 0;
+//	uint32_t rst_index = 0;
+//	while(rst_index < record_num){
+//		uint8_t best_MAPQ = rst[rst_index].MAPQ;
+//		char * read_name = rst[rst_index].read_name;
+//		int begin_index = rst_index;
+//		//get best MAPQ
+//		while(1){
+//			rst_index ++;
+//			if(strcmp(read_name,rst[rst_index].read_name) == 0)
+//				best_MAPQ = MAX(best_MAPQ,rst[rst_index].MAPQ);
+//			else
+//				break;
+//		}
+//		//store the rst that has best MAPQ
+//		for(uint32_t i = begin_index; i < rst_index; i++){
+//			//if(rst[i].MAPQ == best_MAPQ){
+//				memcpy(uni_rst + uni_record_num, rst + i, sizeof(RST));
+//				uni_record_num++;
+//			//}
+//		}
+//	}
+//	//dump
+//	xrm(RST_file_name);
+//	RST * c_uni_rst = uni_rst;
+//	for(int i = 0; i < uni_record_num; i++, c_uni_rst++)
+//		printf("%s\t%c\t%d\t%d\t%d\n",
+//				c_uni_rst->read_name,
+//				c_uni_rst->isClassify,
+//				c_uni_rst->tid,
+//				c_uni_rst->read_length,
+//				c_uni_rst->MAPQ);
+//	free(uni_rst);
+//	free(buff);
+//	free(rst);
+//}
 
 //store minimap SAM in RST format, only the result with the best MAPQ are stored
 //USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
-void dump_sam(char * SAM_file_name)
-{
-	fprintf(stderr,"Dump_sam begin\n");
-	//SAM to RST
-	//step1: OPEN files
-	char   RST_file_name[1024];
-	strcpy(RST_file_name, SAM_file_name); strcat(RST_file_name, ".dump.tmp");
-	FILE * SAM_file = xopen(SAM_file_name,"r");
-	FILE * RST_file = xopen(RST_file_name,"wb");
-	char *buff = (char*)malloc(MAX_BUFF_LEN);
-	//step2: ignore the @SQ and @PG line
-	skip_sam_head(SAM_file, buff);
-
-	//step3: store SAM into RST
-	uint32_t record_num = 0;
-	RST temp_rst;
-	while(1){
-		//get SAM
-		if(getOneSAM(SAM_file, buff, &temp_rst) < 0)
-			break;
-		//write MAF
-		fwrite(&temp_rst,sizeof(RST),1,RST_file);
-		record_num++;
-	}
-	//step4: close files
-	fclose(SAM_file);
-	fclose(RST_file);
-	//step5: reload file and sort
-	FILE * rst_file = xopen(RST_file_name, "rb");
-	RST * rst = (RST *)xmalloc(sizeof(RST)*record_num);
-	xread(rst,sizeof(RST),record_num,rst_file);
-	qsort(rst,record_num,sizeof(RST),cmp_rst);
-	fclose(rst_file);
-	//step6: delete results that is not the best MAPQ
-	RST * uni_rst = (RST *)xmalloc(sizeof(RST)*record_num);
-	int uni_record_num = 0;
-	uint32_t rst_index = 0;
-	while(rst_index < record_num){
-		uint8_t best_MAPQ = rst[rst_index].MAPQ;
-		char * read_name = rst[rst_index].read_name;
-		int begin_index = rst_index;
-		//get best MAPQ
-		while(1){
-			rst_index ++;
-			if(strcmp(read_name,rst[rst_index].read_name) == 0)
-				best_MAPQ = MAX(best_MAPQ,rst[rst_index].MAPQ);
-			else
-				break;
-		}
-		//store the rst that has best MAPQ
-		for(uint32_t i = begin_index; i < rst_index; i++){
-			//if(rst[i].MAPQ == best_MAPQ){
-				memcpy(uni_rst + uni_record_num, rst + i, sizeof(RST));
-				uni_record_num++;
-			//}
-		}
-	}
-	//dump
-	xrm(RST_file_name);
-	RST * c_uni_rst = uni_rst;
-	for(int i = 0; i < uni_record_num; i++, c_uni_rst++)
-		printf("%s\t%c\t%d\t%d\t%d\n",
-				c_uni_rst->read_name,
-				c_uni_rst->isClassify,
-				c_uni_rst->tid,
-				c_uni_rst->read_length,
-				c_uni_rst->MAPQ);
-	free(uni_rst);
-	free(buff);
-	free(rst);
-}
-
-//store minimap SAM in RST format, only the result with the best MAPQ are stored
-//USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
-void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
+static void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
 {
 	//fprintf(stderr,"Dump_sam begin\n");
 	//SAM to RST
@@ -400,12 +432,13 @@ void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
-		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
+		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\t%d\n",
 				temp_rst.read_name,
 				temp_rst.isClassify,
 				temp_rst.tid,
 				temp_rst.read_length,
-				temp_rst.MAPQ);
+				temp_rst.MAPQ,
+				temp_rst.score);
 	}
 	free(buff);
 	fclose(SAM_file);
@@ -414,7 +447,7 @@ void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
 
 
 //------------------------------------------SAM-----------------------------------------//
-int getOnePAF(FILE * PAF_file, char *buff, RST * rst)
+static int getOnePAF(FILE * PAF_file, char *buff, RST * rst)
 {
 	size_t max_l = MAX_BUFF_LEN;
 	char *tokens;
@@ -448,7 +481,7 @@ int getOnePAF(FILE * PAF_file, char *buff, RST * rst)
 
 //store minimap SAM in RST format, only the result with the best MAPQ are stored
 //USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
-void dump_des_PAF_file(char * PAF_file_name, char*dump_file_name)
+static void dump_des_PAF_file(char * PAF_file_name, char*dump_file_name)
 {
 	//fprintf(stderr,"Dump_sam begin\n");
 	//SAM to RST
@@ -483,160 +516,160 @@ void dump_des_PAF_file(char * PAF_file_name, char*dump_file_name)
 //get one line of MAF file, store result in maf
 //return -1 when reach the end of the file
 //buff pool are needed, "char *buff = (char*)malloc(50000);"
-int getOneMAF(FILE * MAF_file, char *buff, MAF * maf)
-{
-	size_t max_l = 50000;
-	char *tokens;
-	for(int flag = 0;flag < 4;flag++){
-		if(getline(&buff,&max_l,MAF_file) <= 0)
-			return -1;
-		switch(flag) {
-		case 0: break;//ignore that line
-		case 1:	tokens = strtok(buff + 2,"|"); tokens = strtok(NULL,"|");
-			maf->tid = strtoul(tokens,NULL, 10); break;//get tid
-		case 2:
-			tokens = strtok(buff + 2," ");
-			strcpy(maf->read_name,tokens); break;//get name
-		case 3: break;//ignore that line
-		}
-	}
-	return 0;
-}
+//static int getOneMAF(FILE * MAF_file, char *buff, MAF * maf)
+//{
+//	size_t max_l = 50000;
+//	char *tokens;
+//	for(int flag = 0;flag < 4;flag++){
+//		if(getline(&buff,&max_l,MAF_file) <= 0)
+//			return -1;
+//		switch(flag) {
+//		case 0: break;//ignore that line
+//		case 1:	tokens = strtok(buff + 2,"|"); tokens = strtok(NULL,"|");
+//			maf->tid = strtoul(tokens,NULL, 10); break;//get tid
+//		case 2:
+//			tokens = strtok(buff + 2," ");
+//			strcpy(maf->read_name,tokens); break;//get name
+//		case 3: break;//ignore that line
+//		}
+//	}
+//	return 0;
+//}
 
 //store pbsim MAF file in maf format
 //USAGE: deSPI3rd cmp dump_pb_maf [PB MAF file name] [MAF file name]
-void dump_maf(char * pacbio_maf_file_name)
-{
-	//MAF to maf.srt
-	//open maf file
-	char   maf_file_name[1024];
-	strcpy(maf_file_name, pacbio_maf_file_name); strcat(maf_file_name, ".dump");
-	FILE * pacbio_maf_file = xopen(pacbio_maf_file_name, "r");
-	FILE * maf_file_srt = xopen(maf_file_name, "wb");
-	uint32_t maf_number = 0;
-	char *buff = (char*)xmalloc(50000);
-	MAF maf;
-	while(1){
-		if(getOneMAF(pacbio_maf_file, buff, &maf) < 0) break;//get MAF
-		fwrite(&maf,sizeof(MAF),1,maf_file_srt);			//write MAF
-		maf_number++;
-	}
-	//close file
-	fclose(pacbio_maf_file);
-	fclose(maf_file_srt);
-	//reload and sort
-	maf_file_srt = xopen(maf_file_name, "rb");
-	MAF *maf_v = (MAF*)malloc(sizeof(MAF)*maf_number);
-	xread(maf_v,sizeof(MAF),maf_number,maf_file_srt);
-	qsort(maf_v,maf_number,sizeof(MAF),cmp_maf);
-	fclose(maf_file_srt);
-	//dump
-	xrm(maf_file_name);
-	MAF *c_maf = maf_v;
-	for(uint32_t i = 0; i < maf_number; i++, c_maf++)
-		printf("%s\t%d\n", c_maf->read_name, c_maf->tid);
-	free(maf_v);
-}
+//static void dump_maf(char * pacbio_maf_file_name)
+//{
+//	//MAF to maf.srt
+//	//open maf file
+//	char   maf_file_name[1024];
+//	strcpy(maf_file_name, pacbio_maf_file_name); strcat(maf_file_name, ".dump");
+//	FILE * pacbio_maf_file = xopen(pacbio_maf_file_name, "r");
+//	FILE * maf_file_srt = xopen(maf_file_name, "wb");
+//	uint32_t maf_number = 0;
+//	char *buff = (char*)xmalloc(50000);
+//	MAF maf;
+//	while(1){
+//		if(getOneMAF(pacbio_maf_file, buff, &maf) < 0) break;//get MAF
+//		fwrite(&maf,sizeof(MAF),1,maf_file_srt);			//write MAF
+//		maf_number++;
+//	}
+//	//close file
+//	fclose(pacbio_maf_file);
+//	fclose(maf_file_srt);
+//	//reload and sort
+//	maf_file_srt = xopen(maf_file_name, "rb");
+//	MAF *maf_v = (MAF*)malloc(sizeof(MAF)*maf_number);
+//	xread(maf_v,sizeof(MAF),maf_number,maf_file_srt);
+//	qsort(maf_v,maf_number,sizeof(MAF),cmp_maf);
+//	fclose(maf_file_srt);
+//	//dump
+//	xrm(maf_file_name);
+//	MAF *c_maf = maf_v;
+//	for(uint32_t i = 0; i < maf_number; i++, c_maf++)
+//		printf("%s\t%d\n", c_maf->read_name, c_maf->tid);
+//	free(maf_v);
+//}
+//
+//static void inline cmp_maf_rst(MAF * maf, RST * rst, MAF_CMP * cmp, TAXONOMY_rank * taxonomy)
+//{
+//	//step1: assert the same read name and store read name
+//	xassert(strcmp_name(maf->read_name,rst->read_name) == 0,": Wrong read name\n");
+//	//store read name
+//	strcpy(cmp->read_name,maf->read_name);
+//	//step2: store true tid and rank
+//	cmp->true_tid = maf->tid;
+//	strcpy(cmp->true_rank,taxonomy[maf->tid].rank);
+//	//step3: store cly tid and rank
+//	cmp->cly_tid = rst->tid;
+//	strcpy(cmp->cly_rank,taxonomy[rst->tid].rank);
+//	//step4: get tid distance and LCA
+//	uint32_t LCA;
+//	cmp->distance = TID_distance(cmp->true_tid,cmp->cly_tid, taxonomy, &LCA);
+//	cmp->LCA_TID = LCA;
+//	strcpy(cmp->LCA_rank,taxonomy[LCA].rank);
+//	//step5: print result
+//	printf("%10s\t%d\t%12s\t%d\t%12s\t%d\t%u\t%12s\n",
+//		cmp->read_name,
+//		cmp->true_tid,
+//		cmp->true_rank,
+//		cmp->cly_tid,
+//		cmp->cly_rank,
+//		cmp->distance,
+//		cmp->LCA_TID,
+//		cmp->LCA_rank);
+//}
 
-static void inline cmp_maf_rst(MAF * maf, RST * rst, MAF_CMP * cmp, TAXONOMY_rank * taxonomy)
-{
-	//step1: assert the same read name and store read name
-	xassert(strcmp_name(maf->read_name,rst->read_name) == 0,": Wrong read name\n");
-	//store read name
-	strcpy(cmp->read_name,maf->read_name);
-	//step2: store true tid and rank
-	cmp->true_tid = maf->tid;
-	strcpy(cmp->true_rank,taxonomy[maf->tid].rank);
-	//step3: store cly tid and rank
-	cmp->cly_tid = rst->tid;
-	strcpy(cmp->cly_rank,taxonomy[rst->tid].rank);
-	//step4: get tid distance and LCA
-	uint32_t LCA;
-	cmp->distance = TID_distance(cmp->true_tid,cmp->cly_tid, taxonomy, &LCA);
-	cmp->LCA_TID = LCA;
-	strcpy(cmp->LCA_rank,taxonomy[LCA].rank);
-	//step5: print result
-	printf("%10s\t%d\t%12s\t%d\t%12s\t%d\t%u\t%12s\n",
-		cmp->read_name,
-		cmp->true_tid,
-		cmp->true_rank,
-		cmp->cly_tid,
-		cmp->cly_rank,
-		cmp->distance,
-		cmp->LCA_TID,
-		cmp->LCA_rank);
-}
-
-int getOneMAF_DUMP(FILE * MAF_file,MAF * maf)
-{
-	size_t max_l = 1024;
-	char static_BUFF[1024];
-	char *buff = static_BUFF;
-	char *tokens;
-	if(getline(&buff,&max_l,MAF_file) <= 0)
-		return -1;
-	tokens = strtok(buff,"\t");
-	strcpy(maf->read_name,tokens);
-	tokens = strtok(NULL,"\t");
-	maf->tid = strtoul(tokens,NULL, 10);
-	return 0;
-}
+//static int getOneMAF_DUMP(FILE * MAF_file,MAF * maf)
+//{
+//	size_t max_l = 1024;
+//	char static_BUFF[1024];
+//	char *buff = static_BUFF;
+//	char *tokens;
+//	if(getline(&buff,&max_l,MAF_file) <= 0)
+//		return -1;
+//	tokens = strtok(buff,"\t");
+//	strcpy(maf->read_name,tokens);
+//	tokens = strtok(NULL,"\t");
+//	maf->tid = strtoul(tokens,NULL, 10);
+//	return 0;
+//}
 
 //compare minimap rst file with maf file
 //USAGE: deSPI3rd cmp cmp_minimap [rst file name] [maf file name] [tax_file_name]
-void rst_ana(char * rst_file_name, char * maf_file_name, char * tax_file_name)
-{
-	//step1: load taxonomyTree
-	TAXONOMY_rank * taxonomyTree = NULL;
-	taxonTree_rank(tax_file_name, &taxonomyTree);
-
-	//step2: compare
-	FILE * rst_file_srt = xopen(rst_file_name, "rb");
-	FILE * maf_file_srt = xopen(maf_file_name, "rb");
-	MAF_CMP cmp;
-	int total_distance = 0;
-	int total_unclassified_reads = 0;
-	uint32_t maf_number = 0, rst_number = 0;
-	RST rst; int eof_rst = getOneRST(rst_file_srt, &rst);
-	MAF maf; int eof_maf = getOneMAF_DUMP(maf_file_srt, &maf);
-	for(; eof_rst >= 0 && eof_maf >= 0;){
-		int cmp_rst = strcmp_name(maf.read_name, rst.read_name);
-		if(cmp_rst == 0){
-			cmp_maf_rst(&maf, &rst, &cmp, taxonomyTree);
-			if(rst.isClassify == 'U') 	total_unclassified_reads++;
-			else						total_distance += cmp.distance;
-			eof_rst = getOneRST(rst_file_srt, &rst); rst_number++;
-		}
-		else if(cmp_rst < 0){
-			eof_maf = getOneMAF_DUMP(maf_file_srt, &maf); maf_number++;
-		}
-		else {
-			fprintf(stderr,"UNKNOW read\n");
-			eof_rst = getOneRST(rst_file_srt, &rst); rst_number++;
-		}
-	}
-	//[1] total simulate reads number
-	//[2] total results number
-	//[3] total distance
-	//[4] total unclassified reads
-	char print_string[10000];
-	sprintf(print_string,
-			"[1] total simulate reads number: [%d]\n"
-			"[2] total results number: [%d]\n"
-			"[3] total distance: [%d]\n"
-			"[4] total unclassified reads: [%d]\n"
-			,maf_number,rst_number,total_distance,total_unclassified_reads);
-	printf("%s",print_string);
-	fprintf(stderr,"%s",print_string);
-	//step3: end PRO
-	free(taxonomyTree);
-	fclose(rst_file_srt);
-	fclose(maf_file_srt);
-}
+//void rst_ana(char * rst_file_name, char * maf_file_name, char * tax_file_name)
+//{
+//	//step1: load taxonomyTree
+//	TAXONOMY_rank * taxonomyTree = NULL;
+//	taxonTree_rank(tax_file_name, &taxonomyTree);
+//
+//	//step2: compare
+//	FILE * rst_file_srt = xopen(rst_file_name, "rb");
+//	FILE * maf_file_srt = xopen(maf_file_name, "rb");
+//	MAF_CMP cmp;
+//	int total_distance = 0;
+//	int total_unclassified_reads = 0;
+//	uint32_t maf_number = 0, rst_number = 0;
+//	RST rst; int eof_rst = getOneRST(rst_file_srt, &rst);
+//	MAF maf; int eof_maf = getOneMAF_DUMP(maf_file_srt, &maf);
+//	for(; eof_rst >= 0 && eof_maf >= 0;){
+//		int cmp_rst = strcmp_name(maf.read_name, rst.read_name);
+//		if(cmp_rst == 0){
+//			cmp_maf_rst(&maf, &rst, &cmp, taxonomyTree);
+//			if(rst.isClassify == 'U') 	total_unclassified_reads++;
+//			else						total_distance += cmp.distance;
+//			eof_rst = getOneRST(rst_file_srt, &rst); rst_number++;
+//		}
+//		else if(cmp_rst < 0){
+//			eof_maf = getOneMAF_DUMP(maf_file_srt, &maf); maf_number++;
+//		}
+//		else {
+//			fprintf(stderr,"UNKNOW read\n");
+//			eof_rst = getOneRST(rst_file_srt, &rst); rst_number++;
+//		}
+//	}
+//	//[1] total simulate reads number
+//	//[2] total results number
+//	//[3] total distance
+//	//[4] total unclassified reads
+//	char print_string[10000];
+//	sprintf(print_string,
+//			"[1] total simulate reads number: [%d]\n"
+//			"[2] total results number: [%d]\n"
+//			"[3] total distance: [%d]\n"
+//			"[4] total unclassified reads: [%d]\n"
+//			,maf_number,rst_number,total_distance,total_unclassified_reads);
+//	printf("%s",print_string);
+//	fprintf(stderr,"%s",print_string);
+//	//step3: end PRO
+//	free(taxonomyTree);
+//	fclose(rst_file_srt);
+//	fclose(maf_file_srt);
+//}
 
 //------------------------------------------CEN-----------------------------------------//
 
-int getOnecenSAM(FILE * SAM_file, char *buff, RST * rst)
+static int getOnecenSAM(FILE * SAM_file, char *buff, RST * rst)
 {
 	size_t max_l = MAX_BUFF_LEN;
 	char *tokens;
@@ -678,7 +711,7 @@ int getOnecenSAM(FILE * SAM_file, char *buff, RST * rst)
 
 //store minimap SAM in RST format, only the result with the best MAPQ are stored
 //USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
-void dump_CEN_file(char * SAM_file_name, char*dump_file_name)
+static void dump_CEN_file(char * SAM_file_name, char*dump_file_name)
 {
 	//SAM to RST
 	//step1: OPEN files
@@ -706,7 +739,7 @@ void dump_CEN_file(char * SAM_file_name, char*dump_file_name)
 	fclose(dump_file);
 }
 //------------------------------------------KAI-----------------------------------------//
-int getOnekaiSAM(FILE * SAM_file, char *buff, RST * rst)
+static int getOnekaiSAM(FILE * SAM_file, char *buff, RST * rst)
 {
 	size_t max_l = MAX_BUFF_LEN;
 	char *tokens;
@@ -737,7 +770,7 @@ int getOnekaiSAM(FILE * SAM_file, char *buff, RST * rst)
 	return 0;
 }
 
-void dump_KAI_file(char * SAM_file_name, char*dump_file_name)
+static void dump_KAI_file(char * SAM_file_name, char*dump_file_name)
 {
 	//step1: OPEN files
 	FILE * SAM_file = xopen(SAM_file_name,"r");
@@ -765,82 +798,82 @@ void dump_KAI_file(char * SAM_file_name, char*dump_file_name)
 }
 
 //------------------------------------------DES-----------------------------------------//
-void print_rst(RST * rst){printf("%s\t%c\t%d\t%d\t%d\n", rst->read_name, rst->isClassify, rst->tid, rst->read_length, rst->MAPQ);}
+//static void print_rst(RST * rst){printf("%s\t%c\t%d\t%d\t%d\n", rst->read_name, rst->isClassify, rst->tid, rst->read_length, rst->MAPQ);}
 ////
-void dump_des(char * deSPI_rst_file_name)
-{
-	//DES to RST
-	//step1: OPEN files
-	//TO
-	FILE * des_file = xopen(deSPI_rst_file_name,"r");
-	char *buff = (char*)malloc(MAX_BUFF_LEN);
-	size_t max_l = MAX_BUFF_LEN; char *tokens;  RST rst;
-
-	while(1){
-		int read_L = getline(&buff,&max_l,des_file);
-		if(read_L <= 0) break;
-		///head line:
-		//get read name
-		tokens = strtok(buff,"\t");
-		strcpy(rst.read_name,tokens);
-		//is classify ?
-		tokens = strtok(NULL,"\t");
-		rst.isClassify = tokens[0];
-		//ignore speed
-		tokens = strtok(NULL,"\t");
-		//get read length
-		tokens = strtok(NULL,"\t");
-		rst.read_length = strtol(tokens,NULL,10);
-		rst.MAPQ = 0;
-		tokens = strtok(NULL,"[");
-		tokens = strtok(NULL,"]");
-		int rst_number = strtol(tokens,NULL,10);
-		tokens = strtok(NULL,"[");
-		tokens = strtok(NULL,"]");
-		int anc_number = strtol(tokens,NULL,10);
-
-		if(rst.isClassify == 'U'){
-			rst.tid = 0;
-			print_rst(&rst);
-		}
-
-		for(int i = 0; i < rst_number; i++)	{
-			read_L = getline(&buff,&max_l,des_file);
-			xassert(read_L > 0, "");
-			if(buff[0] == '\n')
-				break;
-			//cnt and PRI
-			tokens = strtok(buff + 4," ");
-			//F/R
-			tokens = strtok(NULL," ");
-			//tid|
-			tokens = strtok(NULL,"|");
-			tokens = strtok(NULL,"|");
-			rst.tid = strtoul(tokens,NULL,10);
-			print_rst(&rst);
-		}
-		if(rst.isClassify == 'U')
-			for(int i = 0; i < anc_number; i++)
-			{
-				read_L = getline(&buff,&max_l,des_file);
-				xassert(read_L > 0, "");
-				if(buff[0] == '\n')
-					break;
-			}
-		if(buff[0] == '\n')
-			continue;
-		//read "\n" line
-		read_L = getline(&buff,&max_l,des_file);
-		if(read_L > 0)
-			xassert(buff[0] == '\n', "");
-	}
-	free(buff);
-	fclose(des_file);
-}
+//static void dump_des(char * deSPI_rst_file_name)
+//{
+//	//DES to RST
+//	//step1: OPEN files
+//	//TO
+//	FILE * des_file = xopen(deSPI_rst_file_name,"r");
+//	char *buff = (char*)malloc(MAX_BUFF_LEN);
+//	size_t max_l = MAX_BUFF_LEN; char *tokens;  RST rst;
+//
+//	while(1){
+//		int read_L = getline(&buff,&max_l,des_file);
+//		if(read_L <= 0) break;
+//		///head line:
+//		//get read name
+//		tokens = strtok(buff,"\t");
+//		strcpy(rst.read_name,tokens);
+//		//is classify ?
+//		tokens = strtok(NULL,"\t");
+//		rst.isClassify = tokens[0];
+//		//ignore speed
+//		tokens = strtok(NULL,"\t");
+//		//get read length
+//		tokens = strtok(NULL,"\t");
+//		rst.read_length = strtol(tokens,NULL,10);
+//		rst.MAPQ = 0;
+//		tokens = strtok(NULL,"[");
+//		tokens = strtok(NULL,"]");
+//		int rst_number = strtol(tokens,NULL,10);
+//		tokens = strtok(NULL,"[");
+//		tokens = strtok(NULL,"]");
+//		int anc_number = strtol(tokens,NULL,10);
+//
+//		if(rst.isClassify == 'U'){
+//			rst.tid = 0;
+//			print_rst(&rst);
+//		}
+//
+//		for(int i = 0; i < rst_number; i++)	{
+//			read_L = getline(&buff,&max_l,des_file);
+//			xassert(read_L > 0, "");
+//			if(buff[0] == '\n')
+//				break;
+//			//cnt and PRI
+//			tokens = strtok(buff + 4," ");
+//			//F/R
+//			tokens = strtok(NULL," ");
+//			//tid|
+//			tokens = strtok(NULL,"|");
+//			tokens = strtok(NULL,"|");
+//			rst.tid = strtoul(tokens,NULL,10);
+//			print_rst(&rst);
+//		}
+//		if(rst.isClassify == 'U')
+//			for(int i = 0; i < anc_number; i++)
+//			{
+//				read_L = getline(&buff,&max_l,des_file);
+//				xassert(read_L > 0, "");
+//				if(buff[0] == '\n')
+//					break;
+//			}
+//		if(buff[0] == '\n')
+//			continue;
+//		//read "\n" line
+//		read_L = getline(&buff,&max_l,des_file);
+//		if(read_L > 0)
+//			xassert(buff[0] == '\n', "");
+//	}
+//	free(buff);
+//	fclose(des_file);
+//}
 
 //-----------------------------------------ANA TAX-----------------------------------------//
 //rank equal one of "species"/"genus"/"superkingdom"/"family"/"order"/"class"/"phylum"
-uint32_t get_tax_by_rank(TAXONOMY_rank * taxonomyTree, uint32_t tax, char *rank)
+static uint32_t get_tax_by_rank(TAXONOMY_rank * taxonomyTree, uint32_t tax, char *rank)
 {
 	uint32_t c_tax = tax;
 	//get species name
@@ -862,7 +895,7 @@ uint32_t get_tax_by_rank(TAXONOMY_rank * taxonomyTree, uint32_t tax, char *rank)
 
 //-----------------------------------------ANA TAX-----------------------------------------//
 //compare whether tax A is the ancestors node of tax B
-bool compare_tax(TAXONOMY_rank * taxonomyTree, uint32_t tax_A, uint32_t tax_B)
+static bool compare_tax(TAXONOMY_rank * taxonomyTree, uint32_t tax_A, uint32_t tax_B)
 {
 	uint32_t c_tax = tax_B;
 	//get species name
@@ -884,7 +917,7 @@ bool compare_tax(TAXONOMY_rank * taxonomyTree, uint32_t tax_A, uint32_t tax_B)
 //when rank is null, the program will determine the rank automatically
 #define ANA_SHOW_TITLE false
 #define SHOW_DETAIL 1
-void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, char *rank)
+static void ana_tax(char * rst_file_name, uint32_t right_tax, char * tax_file_name, char *rank)
 {
 	//PART 1: load result file
 	//char * rst_file_name = argv[1];
@@ -1043,7 +1076,7 @@ typedef struct{
 	uint32_t	child_list_begin;
 }CLY_NODE;
 
-void ana_meta_loop_print(TAXONOMY_rank * taxonomyTree, CLY_NODE *list, uint32_t node_ID, CN_CHILD *child_list, int level, uint64_t total_read_number)
+static void ana_meta_loop_print(TAXONOMY_rank * taxonomyTree, CLY_NODE *list, uint32_t node_ID, CN_CHILD *child_list, int level, uint64_t total_read_number)
 {
 	CLY_NODE *node = list + node_ID;
 	float rate =  (float)node->weight/total_read_number*100;
@@ -1071,12 +1104,70 @@ typedef struct{
 	int count;
 }COUNT_SORT;
 //all char that are more than '9' are use less than '9'
-int cmp_count_sort(const void *a_, const void *b_){
+static int cmp_count_sort(const void *a_, const void *b_){
 	COUNT_SORT *a = (COUNT_SORT*) a_, *b= (COUNT_SORT *) b_;
 	return a->count < b->count;
 }
 
-void ana_meta(char * rst_file_name, char * tax_file_name)
+//analysis
+uint32_t ana_get_tid(RST *rst, int max_tid, FILE * rst_file_srt, int *eof_, TAXONOMY_rank * taxonomyTree, int *read_len)
+{
+	char old_read_name[READ_NAME_LEN];
+	uint32_t tid = 0;
+	uint32_t score = 0;
+	*eof_ = 0;
+	*read_len = rst->read_length;
+	//when UNMAPPED
+	if(rst->isClassify != 'C')//UNMAPPED
+	{
+		if(getOneRST(rst_file_srt, rst) < 0)
+			*eof_ = -1;
+		return 0;
+	}
+	//get PRIMARY result
+	//copy name
+	strcpy(old_read_name, rst->read_name);
+	//get tid and score
+	if(rst->tid <=  max_tid)//store tid
+	{
+		tid = rst->tid;
+		score = rst->score;
+	}
+	//get other results
+	while(1)//get and ignore other results
+	{
+		*eof_ = getOneRST(rst_file_srt, rst);
+		//return when reach end of file
+		if(*eof_ < 0)
+			return 0;
+		//stop when search to other read
+		if(strcmp(old_read_name, rst->read_name) != 0)
+			break;
+		if(score == 0)
+			break;//with out score information
+		//search other results:
+		if(rst->score != score)
+			continue;
+		if(rst->tid >  max_tid)//UNKNOW TID
+			continue;
+		//when score are the same. detect whether rst->tid is child node of tid
+		uint32_t p_tid = rst->tid;
+		while(1)
+		{
+			if(p_tid == tid)//same tid or is parent
+			{
+				tid = rst->tid;
+				break;
+			}
+			if(p_tid < 1 || p_tid == 4294967295)//over root node, without result
+				break;
+			p_tid = taxonomyTree[p_tid].p_tid;//update p_tid
+		}
+	}
+	return tid;
+}
+
+static void ana_meta(char * rst_file_name, char * tax_file_name)
 {
 	fprintf(stderr, "Current read %s\t", rst_file_name);
 	//PART 1: load result file
@@ -1093,41 +1184,54 @@ void ana_meta(char * rst_file_name, char * tax_file_name)
 	uint32_t *node_count = xcalloc(max_tid, sizeof(uint32_t));
 	//CLY_NODE_V cly_v = {0,0,0};
 	//CLY_NODE root={"root", 1, "root", 0, NULL, NULL};
-
 	// = {"root", 0. "root", 0, NULL, NULL}
 	int total_read_number = 0;
-	char old_read_name[READ_NAME_LEN] = {0};
 	RST rst;
+	int eof_ = 0;
 
 	//count all PRIMARY tax
 	if(getOneRST(rst_file_srt, &rst) < 0)
 		return;
 	while(1)
 	{
-		//get the first result
 		total_read_number++;
-		if(rst.isClassify == 'C')//PRIMARY classified
+		int read_len = 0;
+		//get all results for one read
+		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len);
+		if(final_tid > 0)
 		{
-			if(rst.tid <=  max_tid)//store tid
-				node_count[rst.tid]++;
+			node_count[final_tid]++;
 		}
-		else
-		{
-			if(getOneRST(rst_file_srt, &rst) < 0)
-				break;
-			else
-				continue;
-		}
-		strcpy(old_read_name, rst.read_name);
-		int eof_ = 0;
-		while(1)//get and ignore other results
-		{
-			eof_ = getOneRST(rst_file_srt, &rst);
-			if(eof_ < 0 || (strcmp(old_read_name, rst.read_name) != 0))
-				break;
-		}
-		if(eof_ < 0)
+		if(eof_ < 0)//end if file
 			break;
+//
+//
+//
+//
+//		//get the first result
+//		total_read_number++;
+//		if(rst.isClassify == 'C')//PRIMARY classified
+//		{
+//			if(rst.tid <=  max_tid)//store tid
+//				node_count[rst.tid]++;
+//		}
+//		else
+//		{
+//			if(getOneRST(rst_file_srt, &rst) < 0)
+//				break;
+//			else
+//				continue;
+//		}
+//		strcpy(old_read_name, rst.read_name);
+//		int eof_ = 0;
+//		while(1)//get and ignore other results
+//		{
+//			eof_ = getOneRST(rst_file_srt, &rst);
+//			if(eof_ < 0 || (strcmp(old_read_name, rst.read_name) != 0))
+//				break;
+//		}
+//		if(eof_ < 0)
+//			break;
 	}
 
 	CLY_NODE *node_table = xcalloc(max_tid, sizeof(CLY_NODE));
@@ -1195,11 +1299,12 @@ typedef struct{
 	uint64_t base;
 }BASE_SORT;
 //all char that are more than '9' are use less than '9'
-int cmp_base_sort(const void *a_, const void *b_){
+static int cmp_base_sort(const void *a_, const void *b_){
 	BASE_SORT *a = (BASE_SORT*) a_, *b= (BASE_SORT *) b_;
 	return a->base < b->base;
 }
-void ana_meta_base(char * rst_file_name, char * tax_file_name)
+
+static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 {
 	fprintf(stderr, "Current read %s\t", rst_file_name);
 	//PART 1: load result file
@@ -1220,41 +1325,50 @@ void ana_meta_base(char * rst_file_name, char * tax_file_name)
 	// = {"root", 0. "root", 0, NULL, NULL}
 	int total_read_number = 0;
 	uint64_t total_base_num = 0;
-	char old_read_name[READ_NAME_LEN] = {0};
 	RST rst;
-
+	int eof_ = 0;//end of file
 	//count all PRIMARY tax
 	if(getOneRST(rst_file_srt, &rst) < 0)
 		return;
 	while(1)
 	{
-		//get the first result
 		total_read_number++;
-		if(rst.isClassify == 'C')//PRIMARY classified
+		int read_len = 0;
+		//get all results for one read
+		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len);
+		if(final_tid > 0)
 		{
-			if(rst.tid <=  max_tid)//store tid
-			{
-				total_base_num += rst.read_length;
-				node_base[rst.tid] += rst.read_length;
-			}
+			total_base_num += read_len;
+			node_base[final_tid] += read_len;
 		}
-		else
-		{
-			if(getOneRST(rst_file_srt, &rst) < 0)
-				break;
-			else
-				continue;
-		}
-		strcpy(old_read_name, rst.read_name);
-		int eof_ = 0;
-		while(1)//get and ignore other results
-		{
-			eof_ = getOneRST(rst_file_srt, &rst);
-			if(eof_ < 0 || (strcmp(old_read_name, rst.read_name) != 0))
-				break;
-		}
-		if(eof_ < 0)
+		if(eof_ < 0)//end if file
 			break;
+//
+//		if(rst.isClassify == 'C')//PRIMARY classified
+//		{
+//			if(rst.tid <=  max_tid)//store tid
+//			{
+//				total_base_num += rst.read_length;
+//				node_base[rst.tid] += rst.read_length;
+//			}
+//		}
+//		else
+//		{
+//			if(getOneRST(rst_file_srt, &rst) < 0)
+//				break;
+//			else
+//				continue;
+//		}
+//		strcpy(old_read_name, rst.read_name);
+//		int eof_ = 0;
+//		while(1)//get and ignore other results
+//		{
+//			eof_ = getOneRST(rst_file_srt, &rst);
+//			if(eof_ < 0 || (strcmp(old_read_name, rst.read_name) != 0))
+//				break;
+//		}
+//		if(eof_ < 0)
+//			break;
 	}
 
 	CLY_NODE *node_table = xcalloc(max_tid, sizeof(CLY_NODE));
@@ -1321,7 +1435,7 @@ void ana_meta_base(char * rst_file_name, char * tax_file_name)
 //compare minimap rst file with maf file
 //USAGE: deSPI3rd cmp cmp_minimap [rst file name] [maf file name] [tax_file_name]
 #define uni_v_analysis_NUM 1000
-void uni_v_analysis(char * univ_file_name)
+static void uni_v_analysis(char * univ_file_name)
 {
 	typedef struct {
 		uint32_t ref_list;
@@ -1356,7 +1470,7 @@ void uni_v_analysis(char * univ_file_name)
 //-----------------------------------------U/C count-----------------------------------------//
 //compare minimap rst file with maf file
 //USAGE: deSPI3rd cmp cmp_minimap [rst file name] [maf file name] [tax_file_name]
-void rst_stat(char * rst_file_name)
+static void rst_stat(char * rst_file_name)
 {
 	FILE * rst_file_srt = xopen(rst_file_name, "rb");
 	uint32_t rst_number = 0, classified = 0, un_classified = 0;
@@ -1375,7 +1489,7 @@ void rst_stat(char * rst_file_name)
 //----------------------------------------File name list-----------------------------------------//
 //compare minimap rst file with maf file
 //USAGE: deSPI3rd cmp cmp_minimap [rst file name] [maf file name] [tax_file_name]
-void file_name(char * ref_file_name)
+static void file_name(char * ref_file_name)
 {
 	gzFile fp = xzopen(ref_file_name, "r");
 	kseq_t temp;
@@ -1396,7 +1510,7 @@ void file_name(char * ref_file_name)
 	gzclose(fp);
 }
 //-----------------------------------------main function DES-----------------------------------------//
-void ana_meta_des(char * sam_file_name, char * tax_file_name)
+static void ana_meta_des(char * sam_file_name, char * tax_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1409,7 +1523,7 @@ void ana_meta_des(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
-void ana_meta_des_base(char * sam_file_name, char * tax_file_name)
+static void ana_meta_des_base(char * sam_file_name, char * tax_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1422,7 +1536,7 @@ void ana_meta_des_base(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
-void ana_meta_cen_base(char * sam_file_name, char * tax_file_name)
+static void ana_meta_cen_base(char * sam_file_name, char * tax_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1435,7 +1549,7 @@ void ana_meta_cen_base(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
-void ana_meta_cen(char * sam_file_name, char * tax_file_name)
+static void ana_meta_cen(char * sam_file_name, char * tax_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1448,7 +1562,7 @@ void ana_meta_cen(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
-void ana_meta_kai(char * sam_file_name, char * tax_file_name)
+static void ana_meta_kai(char * sam_file_name, char * tax_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1461,7 +1575,7 @@ void ana_meta_kai(char * sam_file_name, char * tax_file_name)
 	xrm(temp_file_name);
 }
 
-void ana_tax_des(char * sam_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
+static void ana_tax_des(char * sam_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1474,7 +1588,7 @@ void ana_tax_des(char * sam_file_name, uint32_t right_tax, char * tax_file_name 
 }
 
 
-void ana_tax_PAF(char * paf_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
+static void ana_tax_PAF(char * paf_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, paf_file_name);
@@ -1486,7 +1600,7 @@ void ana_tax_PAF(char * paf_file_name, uint32_t right_tax, char * tax_file_name 
 	xrm(temp_file_name);
 }
 
-void ana_tax_CEN(char * cen_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
+static void ana_tax_CEN(char * cen_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, cen_file_name);
@@ -1498,7 +1612,7 @@ void ana_tax_CEN(char * cen_file_name, uint32_t right_tax, char * tax_file_name 
 	xrm(temp_file_name);
 }
 
-void ana_tax_KAI(char * kai_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
+static void ana_tax_KAI(char * kai_file_name, uint32_t right_tax, char * tax_file_name ,char *rank)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, kai_file_name);
@@ -1535,7 +1649,7 @@ typedef struct blast_RST{
 }blast_RST;//24byte
 
 //------------------------------------------KAI-----------------------------------------//
-int getOneBlast(FILE * blast_file, char *buff, blast_RST * rst)
+static int getOneBlast(FILE * blast_file, char *buff, blast_RST * rst)
 {
 	size_t max_l = MAX_BUFF_LEN;
 	int read_L = 0;
@@ -1563,7 +1677,8 @@ int getOneBlast(FILE * blast_file, char *buff, blast_RST * rst)
 			);
 	return 0;
 }
-void ana_BLASTN(char * blastn_file_name)
+
+static void ana_BLASTN(char * blastn_file_name)
 {
 	//step1: OPEN files
 	FILE * BLASTN_file = xopen(blastn_file_name,"r");
@@ -1619,7 +1734,7 @@ void ana_BLASTN(char * blastn_file_name)
 
 //---------------------------------ANALYSIS with filter----------------------------------------------//
 //return 'P' when pass, return 'F' when fail
-char get_filter_result(FILE * filter_file, char * read_name)
+static char get_filter_result(FILE * filter_file, char * read_name)
 {
 	size_t max_l = 1024;
 	char static_BUFF[1024];
@@ -1648,7 +1763,7 @@ char get_filter_result(FILE * filter_file, char * read_name)
 	return 'F';
 }
 
-void ana_tax_with_filter(char * rst_file_name, uint32_t right_tax, char * tax_file_name, char *rank, char * filter_file_name)
+static void ana_tax_with_filter(char * rst_file_name, uint32_t right_tax, char * tax_file_name, char *rank, char * filter_file_name)
 {
 	//PART 1: load result file
 	//char * rst_file_name = argv[1];
@@ -1777,7 +1892,7 @@ void ana_tax_with_filter(char * rst_file_name, uint32_t right_tax, char * tax_fi
 
 //for sam files
 
-void ana_tax_SAM_filter(char * sam_file_name, uint32_t right_tax, char * tax_file_name ,char *rank, char * filter_file_name)
+static void ana_tax_SAM_filter(char * sam_file_name, uint32_t right_tax, char * tax_file_name ,char *rank, char * filter_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, sam_file_name);
@@ -1790,7 +1905,7 @@ void ana_tax_SAM_filter(char * sam_file_name, uint32_t right_tax, char * tax_fil
 }
 
 //for paf files
-void ana_tax_PAF_filter(char * paf_file_name, uint32_t right_tax, char * tax_file_name ,char *rank, char * filter_file_name)
+static void ana_tax_PAF_filter(char * paf_file_name, uint32_t right_tax, char * tax_file_name ,char *rank, char * filter_file_name)
 {
 	char temp_file_name[1024];
 	strcpy(temp_file_name, paf_file_name);
@@ -1803,7 +1918,7 @@ void ana_tax_PAF_filter(char * paf_file_name, uint32_t right_tax, char * tax_fil
 }
 
 //for dump files (cen and kai)
-void ana_tax_DUMP_filter(char * dump_file_name, uint32_t right_tax, char * tax_file_name ,char *rank, char * filter_file_name)
+static void ana_tax_DUMP_filter(char * dump_file_name, uint32_t right_tax, char * tax_file_name ,char *rank, char * filter_file_name)
 {
 	ana_tax_with_filter(dump_file_name, right_tax, tax_file_name, rank, filter_file_name);
 }
@@ -1830,7 +1945,7 @@ void file_cmp_bin(char * file_name1, char * file_name2)
 //-----------------------------------------main-----------------------------------------//
 
 //-----------------------------------------mark SAM file-----------------------------------------//
-int mark_SAM(char * sam_file_name, char * tax_file_name ,char *rank)
+static int mark_SAM(char * sam_file_name, char * tax_file_name ,char *rank)
 {
 	//PART 1: load result file
 	fprintf(stderr, "%s\t", sam_file_name);
@@ -1885,7 +2000,7 @@ int mark_SAM(char * sam_file_name, char * tax_file_name ,char *rank)
 	return 0;
 }
 
-void count_base(char * fastq_file_name)
+static void count_base(char * fastq_file_name)
 {
 	gzFile fp = xzopen(fastq_file_name, "r");
 	kstream_t *_fp = ks_init(fp);
@@ -1902,7 +2017,65 @@ void count_base(char * fastq_file_name)
 	fprintf(stderr, "%s read number: %ld base number %ld ( %f Mbp)\n", fastq_file_name, read_number, total_length, (float)total_length/1000000);
 }
 
-int is_low_complex(char * st, int len)
+static void split_fastq(char * fastq_file_name, int begin, int step)
+{
+	gzFile fp = xzopen(fastq_file_name, "r");
+	kstream_t *_fp = ks_init(fp);
+	kseq_t seq = {0};
+	seq.f = _fp;
+	uint64_t total_length = 0;
+	uint64_t read_number = 0;
+	while( kseq_read(&seq) >= 0)
+	{
+		if((read_number >= begin) && ((read_number - begin) % step == 0))
+		{
+			printf(	"@%s %s\n"
+					"%s\n"
+					"+\n"
+					"@%s\n",
+					seq.name.s,
+					seq.comment.s,
+					seq.seq.s,
+					seq.qual.s);
+			total_length += seq.seq.l;
+		}
+		read_number ++;
+
+	}
+	gzclose(fp);
+	fprintf(stderr, "%s read number: %ld base number %ld ( %f Mbp)\n", fastq_file_name, read_number, total_length, (float)total_length/1000000);
+}
+
+static void get_centrifuge_map_file(char * fasta_file_name)
+{
+	gzFile fp = xzopen(fasta_file_name, "r");
+	kstream_t *_fp = ks_init(fp);
+	kseq_t seq = {0};
+	seq.f = _fp;
+	int tid = 0;
+	while( kseq_read(&seq) >= 0)
+	{
+		for(int i = 4; ;i++)
+			if(seq.name.s[i] == '|')
+			{
+				seq.name.s[i] = 0;
+				break;
+			}
+
+		printf("%s    ", seq.name.s);
+		char * ref_tokens = seq.name.s;
+		//for the ref name part
+		//ignore 'tid|'
+		ref_tokens = strtok(ref_tokens,"|");
+		//get tid
+		ref_tokens = strtok(NULL,"|");
+		tid = strtoul(ref_tokens,NULL,10);
+		printf("%d\n", tid);
+	}
+	gzclose(fp);
+}
+
+static int is_low_complex(char * st, int len)
 {
 	int number_A = 0;
 	int number_C = 0;
@@ -1940,7 +2113,7 @@ int is_low_complex(char * st, int len)
 #define ONLY_READ_FILTER_INFO 1
 #define READ_FILTER_MIN_LEN 1000
 
-void pacbio_filter(char * fastq_file_name)
+static void pacbio_filter(char * fastq_file_name)
 {
 	gzFile fp = xzopen(fastq_file_name, "r");
 	kstream_t *_fp = ks_init(fp);
@@ -1989,7 +2162,7 @@ void pacbio_filter(char * fastq_file_name)
 	fprintf(stderr, "file name: %s total number: %d filtered number: %d\n", fastq_file_name, read_number, filterd_read);
 }
 
-void fastq_to_fasta(char *fastq_file)
+static void fastq_to_fasta(char *fastq_file)
 {
 	gzFile fp = xzopen(fastq_file, "r");
 	kstream_t *_fp = ks_init(fp);
@@ -2012,10 +2185,14 @@ static int cmp_usage()
 	fprintf(stderr, "Contact:   %s\n\n", CONTACT);
 	fprintf(stderr, "  Usage:     %s %s <command> [file]\n\n", PACKAGE_NAME, ANALYSIS_MAIN_COMMAND);
 	fprintf(stderr, "  Command list: \n");
-	fprintf(stderr, "    %s ana_meta    [SAM_file.sam] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
-	fprintf(stderr, "    %s ana_species [SAM_file.sam] [species taxonomy] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
-	fprintf(stderr, "    %s ana_genus   [SAM_file.sam] [genus taxonomy]   [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
-	fprintf(stderr, "    %s ana_sam     [SAM_file.sam] [XXX taxonomy] [node.dmp] [rank]\n", ANALYSIS_MAIN_COMMAND);
+	fprintf(stderr, "    %s ana_meta    	 [SAM_file.sam] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
+	fprintf(stderr, "    %s ana_meta_base    [SAM_file.sam] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
+	fprintf(stderr, "    %s count_base    	 [FASTQ_file.fq]\n", ANALYSIS_MAIN_COMMAND);
+	fprintf(stderr, "    %s split_fastq    	 [FASTQ_file.fq] [start_number] [step_length]\n", ANALYSIS_MAIN_COMMAND);
+	fprintf(stderr, "    %s fastq_to_fasta   [FASTQ_file.fq] \n", ANALYSIS_MAIN_COMMAND);
+	//fprintf(stderr, "    %s ana_species [SAM_file.sam] [species taxonomy] [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
+	//fprintf(stderr, "    %s ana_genus   [SAM_file.sam] [genus taxonomy]   [node.dmp]\n", ANALYSIS_MAIN_COMMAND);
+	//fprintf(stderr, "    %s ana_sam     [SAM_file.sam] [XXX taxonomy] [node.dmp] [rank]\n", ANALYSIS_MAIN_COMMAND);
 	fprintf(stderr, "  Basic:\n");
 	fprintf(stderr, "    [SAM_file.sam]  FILE  Classify file generated from \"classify\" command\n");
 	fprintf(stderr, "    [XXX taxonomy]  INT   taxonomy you want to test in the result file\n");
@@ -2035,16 +2212,16 @@ int simDataTest(int argc, char *argv[])
 	if		(argc <= 1)						  			{cmp_usage();}
 	else if	(0 == strcmp(argv[1], "ana_meta"))			{ana_meta_des(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_base"))		{ana_meta_des_base(	argv[2], argv[3]);}
-	else if	(0 == strcmp(argv[1], "	"))	{ana_meta_cen_base(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "ana_meta_base_cen"))	{ana_meta_cen_base(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_kai"))		{ana_meta_kai(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_cen"))		{ana_meta_cen(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_species"))		{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "species");}
 	else if	(0 == strcmp(argv[1], "ana_genus"))			{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
 	else if	(0 == strcmp(argv[1], "mark_genus"))		{mark_SAM(		argv[2], argv[3], "genus");}
 	else if	(0 == strcmp(argv[1], "ana_meta_rst"))		{ana_meta(		argv[2], argv[3]);}
-	else if	(0 == strcmp(argv[1], "ana_species_rst"))	{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "species");}
-	else if	(0 == strcmp(argv[1], "ana_genus_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
-	else if	(0 == strcmp(argv[1], "ana_rank_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
+	//else if	(0 == strcmp(argv[1], "ana_species_rst"))	{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "species");}
+	//else if	(0 == strcmp(argv[1], "ana_genus_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
+	//else if	(0 == strcmp(argv[1], "ana_rank_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
 	else if	(0 == strcmp(argv[1], "ana_sam"))			{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
 	else if	(0 == strcmp(argv[1], "ana_paf"))			{ana_tax_PAF(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
 	else if	(0 == strcmp(argv[1], "ana_cen"))			{ana_tax_CEN(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}//centrifuge
@@ -2053,14 +2230,16 @@ int simDataTest(int argc, char *argv[])
 	else if	(0 == strcmp(argv[1], "ana_dump_filter"))	{ana_tax_DUMP_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "ana_sam_filter"))	{ana_tax_SAM_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "ana_paf_filter"))	{ana_tax_PAF_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
-	else if	(0 == strcmp(argv[1], "read_ana"))			{count_base(	argv[2]);}
+	else if	(0 == strcmp(argv[1], "count_base"))		{count_base(	argv[2]);}
+	else if	(0 == strcmp(argv[1], "cen_map"))			{get_centrifuge_map_file(	argv[2]);}
+	else if	(0 == strcmp(argv[1], "split_fastq"))		{split_fastq(	argv[2], strtoul(argv[3],0,10), strtoul(argv[4],0,10));}
 	else if	(0 == strcmp(argv[1], "pacbio_filter"))		{pacbio_filter(	argv[2]);}
 	else if	(0 == strcmp(argv[1], "fastq_to_fasta"))	{fastq_to_fasta(	argv[2]);}
-	else if	(0 == strcmp(argv[1], "dump_sam"))			{ASSERT_PARA(3);dump_sam(argv[2]);}
-	else if	(0 == strcmp(argv[1], "dump_maf"))			{ASSERT_PARA(3);dump_maf(argv[2]);}
-	else if	(0 == strcmp(argv[1], "dump_des"))			{ASSERT_PARA(3);dump_des(argv[2]);}
+	//else if	(0 == strcmp(argv[1], "dump_sam"))			{ASSERT_PARA(3);dump_sam(argv[2]);}
+	//else if	(0 == strcmp(argv[1], "dump_maf"))			{ASSERT_PARA(3);dump_maf(argv[2]);}
+	//else if	(0 == strcmp(argv[1], "dump_des"))			{ASSERT_PARA(3);dump_des(argv[2]);}
 	else if	(0 == strcmp(argv[1], "ana_univ"))			{ASSERT_PARA(3);uni_v_analysis(argv[2]);}
-	else if	(0 == strcmp(argv[1], "cmp_rst")) 			{ASSERT_PARA(5);rst_ana(argv[2],argv[3],argv[4]);}
+	//else if	(0 == strcmp(argv[1], "cmp_rst")) 			{ASSERT_PARA(5);rst_ana(argv[2],argv[3],argv[4]);}
 	else if	(0 == strcmp(argv[1], "rst_stat"))			{ASSERT_PARA(3);rst_stat(argv[2]);}
 	else if	(0 == strcmp(argv[1], "file_name"))			{ASSERT_PARA(3);file_name(argv[2]);}
 	else if	(0 == strcmp(argv[1], "file_cmp"))			{file_cmp_bin(argv[2], argv[3]);}
