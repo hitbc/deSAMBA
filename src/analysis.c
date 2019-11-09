@@ -238,8 +238,8 @@ static int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
 		//with other label
 		//get AS
 		tokens = strtok(NULL,":");
-		//if(tokens != NULL && tokens[0] == 'N' && tokens[1] == 'M')//code for minimap2
-		if(tokens != NULL && tokens[0] == 'A' && tokens[1] == 'S')//code for deSAMBA
+		//if(tokens != NULL && ((tokens[0] == 'N' && tokens[1] == 'M')) )//code for minimap2
+		if(tokens != NULL && ((tokens[0] == 'A' && tokens[1] == 'S') || (tokens[0] == 'N' && tokens[1] == 'M')) )//AS:i code for deSAMBA; NM:i code for minimap2
 		{
 			//get i
 			tokens = strtok(NULL,":");
@@ -2032,7 +2032,7 @@ static void split_fastq(char * fastq_file_name, int begin, int step)
 			printf(	"@%s %s\n"
 					"%s\n"
 					"+\n"
-					"@%s\n",
+					"%s\n",
 					seq.name.s,
 					seq.comment.s,
 					seq.seq.s,
@@ -2040,7 +2040,6 @@ static void split_fastq(char * fastq_file_name, int begin, int step)
 			total_length += seq.seq.l;
 		}
 		read_number ++;
-
 	}
 	gzclose(fp);
 	fprintf(stderr, "%s read number: %ld base number %ld ( %f Mbp)\n", fastq_file_name, read_number, total_length, (float)total_length/1000000);
