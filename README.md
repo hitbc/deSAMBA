@@ -78,6 +78,8 @@ bash ./build
         find fasta_file_dir/ -name "*.fasta"   | xargs -n 1 cat > WGS_FILE.fa
 ```
    to combined mulity fasta files into one.
+   
+   When building index for user-defined reference files, reference files must start as: >tid|one_taxonomy_ID|, like ">tid|285013|ref|NC_006268.1". When you do not follow this format, there maybe some wrong when you running "analysis" step.
  
 **Demo**
 
