@@ -79,7 +79,7 @@ bash ./build
 ```
    to combined mulity fasta files into one.
    
-   When building index for user-defined reference files, reference files must start as: >tid|one_taxonomy_ID|, like ">tid|285013|ref|NC_006268.1". When you do not follow this format, there maybe some wrong when you running "analysis" step.
+   When building index for user-defined reference files, reference files must start with:" >tid|one_taxonomy_ID|", like ">tid|285013|ref|NC_006268.1". When you do not follow this format, there maybe some wrong when you running "analysis" step.
  
 **Demo**
 
@@ -115,7 +115,7 @@ bash build-index [file].fa ./index_dir
 
 ```
 Increasing "-l" and "-s" options will increase accuracy but decrease sensitivity.
-[read.fastq] can be long noisy reads(error rate < 25%) or short NGS reads.
+[read.fastq] can be long noisy reads(error rate < 30%) or short NGS reads.
 
 SAM format results contain " [read name] [flag] [reference name] [position in referece] [MAPQ] [CIGAR]" in each record line.
 
@@ -131,7 +131,7 @@ One is analysising by base numbers. The analyzer counts all base pairs in each t
 
 The other is by read numbers. The analyzer counts all reads int each taxonomy, then divides the results by total read number(include unmapped reads).
 
-When one read mapped to more than one positions in references, only "PRIMARY" result will be used to analysis.
+When one read mapped to more than one positions in references, only "PRIMARY" results (results with most alignment scores) will be used to analysis.
 ```
 ./download taxnomy #download node.dmp
 #analysis (by base pair number)
