@@ -82,7 +82,7 @@ bash ./build
    When building index for user-defined reference files, reference files must start with:" >tid|one_taxonomy_ID|", like ">tid|285013|ref|NC_006268.1". Please add "tid|taxonomy_ID|" after ">" at each reference genome. When you do not follow this format, there maybe some wrong when you running "analysis" step. In linux, using command:
 
 ```
-      sed -i "s/^>/>tid|$TAXID|ref|/" $LIBDIR/$DOMAIN/$NAME
+      sed -i "s/^>/>tid|TAXID|ref|/" one_genome.fasta
 ```
 for each file to add the string.
  
