@@ -447,6 +447,116 @@ static void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
 
 
 //------------------------------------------SAM-----------------------------------------//
+int getOneMATEMAP(FILE * SAM_file, char *buff, RST * rst, int *exchange_list)
+{
+	size_t max_l = MAX_BUFF_LEN;
+	char *tokens;
+	int read_L = 0;
+	read_L = getline(&buff,&max_l,SAM_file);
+	if(read_L <= 0)
+		return -1;
+	//if(buff[0] != 'S' && buff[0] != 'D' && buff[0] != 'E')
+	//{
+	//	fprintf(stderr, "Not Normal SAM.\n");
+	//}
+	//get read name
+	tokens = strtok(buff," ");
+	strcpy(rst->read_name,tokens);
+	//get read length
+	tokens = strtok(NULL," ");
+	rst->read_length = strtoul(tokens,NULL,10);
+	//ignore 0
+	tokens = strtok(NULL," ");
+	//ignore read len
+	tokens = strtok(NULL," ");
+	//ignore +/-
+	tokens = strtok(NULL," ");
+	//ignore cXXXXX
+	tokens = strtok(NULL,"d");
+	//ignore cXXXXX
+	tokens = strtok(NULL,"|");
+	//get tid
+	if(tokens[0] == 'x')
+		rst->tid = exchange_list[strtoul(tokens + 1,NULL,10)];
+	else
+		rst->tid = strtoul(tokens + 0,NULL,10);
+	//ignore other |NZ_XXXX
+	tokens = strtok(NULL," ");
+	//ignore ref part
+	tokens = strtok(NULL," ");
+	tokens = strtok(NULL," ");
+	tokens = strtok(NULL," ");
+	tokens = strtok(NULL," ");
+	tokens = strtok(NULL," ");
+	tokens = strtok(NULL," ");
+	tokens = strtok(NULL," ");
+	//get score
+	float score = strtof(tokens,NULL);
+	rst->score = score*10000;
+	rst->isClassify = 'C';
+	return 0;
+}
+
+//store minimap SAM in RST format, only the result with the best MAPQ are stored
+//USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
+void dump_matemaps_file(char * SAM_file_name, char*dump_file_name, char * exchange_file)
+{
+	//load exchange file
+	int *exchange_list = xcalloc(10000, sizeof(int));
+	FILE * EXC_file = xopen(exchange_file,"r");
+	int subspecies_ID = 0;
+	int species_ID = 0;
+	while(fscanf(EXC_file, "x%d\t%d\n", &subspecies_ID, &species_ID) > 0)
+		exchange_list[subspecies_ID] = species_ID;
+	fclose(EXC_file);
+	//SAM to RST
+	//step1: OPEN files
+	FILE * SAM_file = xopen(SAM_file_name,"r");
+	FILE * dump_file = xopen(dump_file_name,"w");
+	char *buff = (char*)malloc(MAX_BUFF_LEN);
+	//step2: ignore the @SQ and @PG line
+	skip_sam_head(SAM_file, buff);
+	//step3: store SAM into RST
+	uint32_t record_num = 0;
+	RST temp_rst , max_record;
+	char old_name[128] = "";
+	int max_score = 0;
+	while(1){
+		//get SAM
+		if(getOneMATEMAP(SAM_file, buff, &temp_rst, exchange_list) < 0)
+			break;
+		if(strcmp(old_name, temp_rst.read_name) == 0)
+		{
+			if(max_score < temp_rst.score)
+			{
+				memcpy(&max_record, &temp_rst,sizeof(RST));
+				max_score = temp_rst.score;
+			}
+		}
+		else if(record_num != 0)
+		{
+			fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\t%d\n",
+					max_record.read_name,
+					max_record.isClassify,
+					max_record.tid,
+					max_record.read_length,
+					max_record.MAPQ,
+					max_record.score);
+			max_score = 0;
+			strcpy(old_name, temp_rst.read_name);
+			memcpy(&max_record, &temp_rst,sizeof(RST));
+		}
+		else
+			strcpy(old_name, temp_rst.read_name);
+		//write MAF
+		record_num++;
+	}
+	free(buff);
+	fclose(SAM_file);
+	fclose(dump_file);
+}
+
+//------------------------------------------SAM-----------------------------------------//
 static int getOnePAF(FILE * PAF_file, char *buff, RST * rst)
 {
 	size_t max_l = MAX_BUFF_LEN;
@@ -687,6 +797,7 @@ static int getOnecenSAM(FILE * SAM_file, char *buff, RST * rst)
 	rst->tid = strtoul(tokens,NULL,10);
 	rst->MAPQ = 0;
 	rst->read_length = 0;
+	rst->score = 1;
 	if(rst->tid == 0) {
 		rst->isClassify = 'U';
 	}
@@ -727,12 +838,13 @@ static void dump_CEN_file(char * SAM_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
-		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
+		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\t%d\n",
 				temp_rst.read_name,
 				temp_rst.isClassify,
 				temp_rst.tid,
 				temp_rst.read_length,
-				temp_rst.MAPQ);
+				temp_rst.MAPQ,
+				temp_rst.score);
 	}
 	free(buff);
 	fclose(SAM_file);
@@ -1110,7 +1222,7 @@ static int cmp_count_sort(const void *a_, const void *b_){
 }
 
 //analysis
-uint32_t ana_get_tid(RST *rst, int max_tid, FILE * rst_file_srt, int *eof_, TAXONOMY_rank * taxonomyTree, int *read_len)
+uint32_t ana_get_tid(RST *rst, int max_tid, FILE * rst_file_srt, int *eof_, TAXONOMY_rank * taxonomyTree, int *read_len, float* coverage)
 {
 	char old_read_name[READ_NAME_LEN];
 	uint32_t tid = 0;
@@ -1132,6 +1244,10 @@ uint32_t ana_get_tid(RST *rst, int max_tid, FILE * rst_file_srt, int *eof_, TAXO
 	{
 		tid = rst->tid;
 		score = rst->score;
+		if(rst->read_length > 0)
+			*coverage = (float)score/rst->read_length;
+		else
+			*coverage = 0;
 	}
 	//get other results
 	while(1)//get and ignore other results
@@ -1188,6 +1304,7 @@ static void ana_meta(char * rst_file_name, char * tax_file_name)
 	int total_read_number = 0;
 	RST rst;
 	int eof_ = 0;
+	float coverage = 0;
 
 	//count all PRIMARY tax
 	if(getOneRST(rst_file_srt, &rst) < 0)
@@ -1197,7 +1314,7 @@ static void ana_meta(char * rst_file_name, char * tax_file_name)
 		total_read_number++;
 		int read_len = 0;
 		//get all results for one read
-		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len);
+		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len, &coverage);
 		if(final_tid > 0)
 		{
 			node_count[final_tid]++;
@@ -1304,6 +1421,8 @@ static int cmp_base_sort(const void *a_, const void *b_){
 	return a->base < b->base;
 }
 
+#define MIN_SCORE 10
+
 static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 {
 	fprintf(stderr, "Current read %s\t", rst_file_name);
@@ -1325,8 +1444,11 @@ static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 	// = {"root", 0. "root", 0, NULL, NULL}
 	int total_read_number = 0;
 	uint64_t total_base_num = 0;
+	uint64_t low_identity_read_num = 0;
+	uint64_t low_identity_read_base = 0;
 	RST rst;
 	int eof_ = 0;//end of file
+	float coverage = 0;
 	//count all PRIMARY tax
 	if(getOneRST(rst_file_srt, &rst) < 0)
 		return;
@@ -1335,11 +1457,19 @@ static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 		total_read_number++;
 		int read_len = 0;
 		//get all results for one read
-		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len);
+		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len, &coverage);
 		if(final_tid > 0)
 		{
-			total_base_num += read_len;
-			node_base[final_tid] += read_len;
+			if(coverage * read_len > MIN_SCORE)
+			{
+				total_base_num += read_len;
+				node_base[final_tid] += read_len;
+				if(coverage < 0.08)
+				{
+					low_identity_read_base += read_len;
+					low_identity_read_num++;
+				}
+			}
 		}
 		if(eof_ < 0)//end if file
 			break;
@@ -1423,12 +1553,27 @@ static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 	ana_meta_loop_print(taxonomyTree, node_table, 1, child_list, 0, total_base_num);
 	//printf("</Data>\n");
 	//number
-	fprintf(stderr,"total_mapped_base_number :%ld\t",total_base_num);
-
+	fprintf(stderr,"total_mapped_base_number :%ld\n",total_base_num);
+	fprintf(stderr,"low identity read (identity <= 75%%) number :%ld\t",low_identity_read_num);
+	fprintf(stderr,"total base %ld\t", low_identity_read_base);
 	//step3: end PRO
 	free(taxonomyTree);
 	fclose(rst_file_srt);
 	//fclose(maf_file_srt);
+}
+
+
+static void ana_meta_metamaps_base(char * sam_file_name, char * tax_file_name, char * exchange_file)
+{
+	char temp_file_name[1024];
+	strcpy(temp_file_name, sam_file_name);
+	strcat(temp_file_name, ".temp");
+	//temp file
+	//dump des sam
+	dump_matemaps_file(sam_file_name, temp_file_name, exchange_file);
+	//analysis
+	ana_meta_base(temp_file_name, tax_file_name);
+	//xrm(temp_file_name);
 }
 
 //-----------------------------------------uni_v_analysis-----------------------------------------//
@@ -1572,6 +1717,57 @@ static void ana_meta_kai(char * sam_file_name, char * tax_file_name)
 	dump_KAI_file(sam_file_name, temp_file_name);
 	//analysis
 	ana_meta(temp_file_name, tax_file_name);
+	xrm(temp_file_name);
+}
+
+static void dump_KAI_file_with_length(char * SAM_file_name, char*dump_file_name, int *read_length_list)
+{
+	//step1: OPEN files
+	FILE * SAM_file = xopen(SAM_file_name,"r");
+	FILE * dump_file = xopen(dump_file_name,"w");
+	char *buff = (char*)malloc(MAX_BUFF_LEN);
+	//step3: store SAM into RST
+	uint32_t record_num = 0;
+	RST temp_rst;
+	while(1){
+		//get SAM
+		if(getOnekaiSAM(SAM_file, buff, &temp_rst) < 0)
+			break;
+		//write MAF
+		record_num++;
+		long int read_ID = strtol(temp_rst.read_name + 11, NULL, 10);
+		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\n",
+				temp_rst.read_name,
+				temp_rst.isClassify,
+				temp_rst.tid,
+				read_length_list[read_ID],
+				temp_rst.MAPQ);
+	}
+	free(buff);
+	fclose(SAM_file);
+	fclose(dump_file);
+}
+
+//read_length_fn: read ID with length, format: XXX XXX
+static void ana_meta_kai_base(char * sam_file_name, char * tax_file_name, char *read_length_fn)
+{
+	//load length file
+	FILE * read_length_file = xopen(read_length_fn,"r");
+	int *read_length_list = xcalloc(5000000, sizeof(int));//at most 5M reads support
+	int read_ID = 0;
+	int read_len = 0;
+	while(fscanf(read_length_file, "%d %d\n", &read_ID, &read_len) > 0)
+		read_length_list[read_ID] = read_len;
+	fclose(read_length_file);
+	//dump kai file with length
+	char temp_file_name[1024];
+	strcpy(temp_file_name, sam_file_name);
+	strcat(temp_file_name, ".temp");
+	//temp file
+	//dump des sam
+	dump_KAI_file_with_length(sam_file_name, temp_file_name, read_length_list);
+	//analysis
+	ana_meta_base(temp_file_name, tax_file_name);
 	xrm(temp_file_name);
 }
 
@@ -2175,6 +2371,17 @@ static void fastq_to_fasta(char *fastq_file)
 	}
 }
 
+static void fastq_to_name(char *fastq_file)
+{
+	gzFile fp = xzopen(fastq_file, "r");
+	kstream_t *_fp = ks_init(fp);
+
+	kseq_t temp = {0};
+	temp.f = _fp;
+	while( kseq_read(&temp) >= 0)
+		printf("%s %s\n", temp.name.s, temp.comment.s);
+}
+
 #define ANALYSIS_MAIN_COMMAND "analysis"
 static int cmp_usage()
 {
@@ -2211,13 +2418,15 @@ int simDataTest(int argc, char *argv[])
 	if		(argc <= 1)						  			{cmp_usage();}
 	else if	(0 == strcmp(argv[1], "ana_meta"))			{ana_meta_des(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_base"))		{ana_meta_des_base(	argv[2], argv[3]);}
-	else if	(0 == strcmp(argv[1], "ana_meta_base_cen"))	{ana_meta_cen_base(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "ana_meta_cen_base"))	{ana_meta_cen_base(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_kai"))		{ana_meta_kai(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "ana_meta_kai_base"))	{ana_meta_kai_base(	argv[2], argv[3],  argv[4]);}
 	else if	(0 == strcmp(argv[1], "ana_meta_cen"))		{ana_meta_cen(	argv[2], argv[3]);}
 	else if	(0 == strcmp(argv[1], "ana_species"))		{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "species");}
 	else if	(0 == strcmp(argv[1], "ana_genus"))			{ana_tax_des(	argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
 	else if	(0 == strcmp(argv[1], "mark_genus"))		{mark_SAM(		argv[2], argv[3], "genus");}
 	else if	(0 == strcmp(argv[1], "ana_meta_rst"))		{ana_meta(		argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "ana_matemaps_base"))	{ana_meta_metamaps_base(	argv[2], argv[3], argv[4]);}
 	//else if	(0 == strcmp(argv[1], "ana_species_rst"))	{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "species");}
 	//else if	(0 == strcmp(argv[1], "ana_genus_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], "genus");}
 	//else if	(0 == strcmp(argv[1], "ana_rank_rst"))		{ana_tax(		argv[2], strtoul(argv[3],0,10), argv[4], argv[5]);}
@@ -2234,6 +2443,7 @@ int simDataTest(int argc, char *argv[])
 	else if	(0 == strcmp(argv[1], "split_fastq"))		{split_fastq(	argv[2], strtoul(argv[3],0,10), strtoul(argv[4],0,10));}
 	else if	(0 == strcmp(argv[1], "pacbio_filter"))		{pacbio_filter(	argv[2]);}
 	else if	(0 == strcmp(argv[1], "fastq_to_fasta"))	{fastq_to_fasta(	argv[2]);}
+	else if	(0 == strcmp(argv[1], "fastq_to_name"))		{fastq_to_name(	argv[2]);}
 	//else if	(0 == strcmp(argv[1], "dump_sam"))			{ASSERT_PARA(3);dump_sam(argv[2]);}
 	//else if	(0 == strcmp(argv[1], "dump_maf"))			{ASSERT_PARA(3);dump_maf(argv[2]);}
 	//else if	(0 == strcmp(argv[1], "dump_des"))			{ASSERT_PARA(3);dump_des(argv[2]);}
