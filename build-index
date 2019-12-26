@@ -19,7 +19,9 @@ Program:   build_index
                             - Otherwise using user defined reference 
                                 sequences[.fa], storing them in one file.
                                 When you have more than one files,	
-                                combined them into one.
+                                combined them into one.Make sure all genome start like :
+				">tid|285013|ref|NC_006268.1" to running analysis based on taxnomy
+				like "285013".
     <index_dir>   FOLDER  folder to store index.
 "
 if [ $# -lt 2 ]
