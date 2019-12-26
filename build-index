@@ -9,9 +9,9 @@ DE_SAMBA=./bin/deSAMBA
 USAGE="
 Program:   build_index
   Usage:
-    `basename $0` <REF_DIR> <index_dir>
+    `basename $0` <ref_file> <index_dir>
   Basic:
-    <ref_file>  FILE    \"all\"\\\"viral\" OR [file] of reference sequences.
+    <ref_file>  FILE/STR    \"all\"\\\"viral\" OR [file] of reference sequences.
                             - all: Using lastest NCBI RefSeq 
                                 bacteria+viral+archaea database.
                             - viral: Using lastest NCBI RefSeq viral 
@@ -20,7 +20,7 @@ Program:   build_index
                                 sequences[.fa], storing them in one file.
                                 When you have more than one files,	
                                 combined them into one.
-    <IDX_DIR>   FOLDER  folder to store index.
+    <index_dir>   FOLDER  folder to store index.
 "
 if [ $# -lt 2 ]
 then 
