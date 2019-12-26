@@ -23,9 +23,9 @@ static int usage()
 	fprintf(stderr, "Contact: %s\n\n", CONTACT);
 	fprintf(stderr, "  Usage  : %s <command> \n", PACKAGE_NAME);
 	fprintf(stderr, "  Command: \n");
-	fprintf(stderr, "		index   :	index reference sequences\n");
-	fprintf(stderr, "		classify:	classify metagenomic reads\n");
-	fprintf(stderr, "		analysis:	Analysis results\n");
+	fprintf(stderr, "		index   :	index the reference sequences\n");
+	fprintf(stderr, "		classify:	classify meta-genomic reads\n");
+	fprintf(stderr, "		analysis:	analysis results\n");
 	fprintf(stderr, "		kmersort:	sort the kmer-result of Jellyfish\n");
 	fprintf(stderr, "\n");
 	return 1;
