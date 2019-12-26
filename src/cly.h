@@ -21,6 +21,7 @@ typedef struct {
 	int show_anchor;
 	FILE * outfile;
 	int min_score;
+	//bool strain_mode;
 }MAP_opt;
 
 typedef struct
@@ -84,7 +85,7 @@ typedef struct
 	uint32_t indel;//total length of insert and delete
 
 	uint32_t chain_id;//
-	Anchor *chain_anchor_cur;//target start
+	Anchor *chain_anchor_cur ;//target start
 }chain_item;
 
 kvec_T(chain_item, chain_set)

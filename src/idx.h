@@ -11,7 +11,7 @@
 #include "lib/kvec.h"
 
 typedef struct{
-	char ref_name[128];
+	char ref_name[128] ;
 	uint64_t seq_l;
 	uint64_t seq_offset;
 }REF_INFO;
@@ -89,6 +89,7 @@ typedef struct
 	int 		filter_min_length;
 	int 		filter_min_score;
 	int 		filter_min_score_LV3;
+	//int			strain_mode;
 }DA_IDX;
 
 typedef struct

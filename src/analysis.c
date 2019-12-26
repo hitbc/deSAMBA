@@ -246,6 +246,19 @@ static int getOneSAM(FILE * SAM_file, char *buff, RST * rst)
 			//get score
 			tokens = strtok(NULL,"\t");
 			rst->score = strtoul(tokens,NULL,10);
+			tokens = strtok(NULL,":");
+			//minimap2: ms
+			if(tokens != NULL && ((tokens[0] == 'm' && tokens[1] == 's') ))//ms:i code for deSAMBA; NM:i code for minimap2
+			{
+				tokens = strtok(NULL,":");//ignore 'i'
+				//get score
+				tokens = strtok(NULL,"\t");
+				rst->score = strtoul(tokens,NULL,10);
+			}
+			tokens = strtok(NULL,":");
+			//get score
+			tokens = strtok(NULL,"\t");
+
 		}
 		//for the ref name part
 		{
@@ -410,7 +423,8 @@ static void skip_sam_head(FILE * SAM_file, char *buff)
 //	free(buff);
 //	free(rst);
 //}
-
+#define MIN_read_N 0
+#define MAX_read_N MAX_uint32_t
 //store minimap SAM in RST format, only the result with the best MAPQ are stored
 //USAGE: deSPI3rd cmp dump_minimap [SAM file name] [RST file name]
 static void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
@@ -432,6 +446,10 @@ static void dump_des_sam_file(char * SAM_file_name, char*dump_file_name)
 			break;
 		//write MAF
 		record_num++;
+		if(record_num > MAX_read_N)
+			break;
+		if(record_num < MIN_read_N)
+			continue;
 		fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\t%d\n",
 				temp_rst.read_name,
 				temp_rst.isClassify,
@@ -455,6 +473,15 @@ int getOneMATEMAP(FILE * SAM_file, char *buff, RST * rst, int *exchange_list)
 	read_L = getline(&buff,&max_l,SAM_file);
 	if(read_L <= 0)
 		return -1;
+	//change \0 to blank
+	for(int i = 0; i < read_L; i++)
+	{
+		if(buff[i] < 10)
+		{
+			buff[i] = ' ';
+		}
+	}
+
 	//if(buff[0] != 'S' && buff[0] != 'D' && buff[0] != 'E')
 	//{
 	//	fprintf(stderr, "Not Normal SAM.\n");
@@ -518,7 +545,9 @@ void dump_matemaps_file(char * SAM_file_name, char*dump_file_name, char * exchan
 	skip_sam_head(SAM_file, buff);
 	//step3: store SAM into RST
 	uint32_t record_num = 0;
-	RST temp_rst , max_record;
+	RST temp_rst;
+	RST *max_record_L = xmalloc(sizeof(RST)*30000);
+	int number_max_record = 0;
 	char old_name[128] = "";
 	int max_score = 0;
 	while(1){
@@ -529,22 +558,34 @@ void dump_matemaps_file(char * SAM_file_name, char*dump_file_name, char * exchan
 		{
 			if(max_score < temp_rst.score)
 			{
-				memcpy(&max_record, &temp_rst,sizeof(RST));
+				memcpy(max_record_L, &temp_rst,sizeof(RST));
 				max_score = temp_rst.score;
+				number_max_record = 1;
+			}
+			else if(max_score == temp_rst.score)
+			{
+				memcpy(max_record_L + number_max_record, &temp_rst,sizeof(RST));
+				number_max_record++;
 			}
 		}
 		else if(record_num != 0)
 		{
-			fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\t%d\n",
-					max_record.read_name,
-					max_record.isClassify,
-					max_record.tid,
-					max_record.read_length,
-					max_record.MAPQ,
-					max_record.score);
+			if(number_max_record > 10000)
+				fprintf(stderr, "read: %s, number %d\n", max_record_L[0].read_name, number_max_record);
+			for(int i = 0; i < number_max_record; i++)
+			{
+				fprintf(dump_file, "%s\t%c\t%d\t%d\t%d\t%d\n",
+						max_record_L[i].read_name,
+						max_record_L[i].isClassify,
+						max_record_L[i].tid,
+						max_record_L[i].read_length,
+						max_record_L[i].MAPQ,
+						max_record_L[i].score);
+			}
 			max_score = 0;
 			strcpy(old_name, temp_rst.read_name);
-			memcpy(&max_record, &temp_rst,sizeof(RST));
+			memcpy(max_record_L, &temp_rst,sizeof(RST));
+			number_max_record = 1;
 		}
 		else
 			strcpy(old_name, temp_rst.read_name);
@@ -1186,23 +1227,28 @@ typedef struct{
 	char 		rank[20];
 	uint64_t 		weight;
 	uint32_t	child_list_begin;
+	uint64_t 		total_mapQ;
 }CLY_NODE;
 
-static void ana_meta_loop_print(TAXONOMY_rank * taxonomyTree, CLY_NODE *list, uint32_t node_ID, CN_CHILD *child_list, int level, uint64_t total_read_number)
+static void ana_meta_loop_print(TAXONOMY_rank * taxonomyTree, CLY_NODE *list, uint32_t node_ID, CN_CHILD *child_list, int level, uint64_t total_read_number, bool is_base)
 {
 	CLY_NODE *node = list + node_ID;
 	float rate =  (float)node->weight/total_read_number*100;
+	float map_q = (float)node->total_mapQ/node->weight * rate;
 	if(rate < 0.01)
 		return;
 	for(int i = 0; i < level; i++)
 		printf("|");
-	printf("%s TID:%d %s %f%%\n",taxonomyTree[node_ID].rank, node_ID, node->tax_name, rate);
+	if(is_base)
+		printf("%s TID:%d %s %f%%, mapQ:%f\n",taxonomyTree[node_ID].rank, node_ID, node->tax_name, rate, map_q);
+	else
+		printf("%s TID:%d %s %f%%\n",taxonomyTree[node_ID].rank, node_ID, node->tax_name, rate);
 	if(node->child_list_begin != 0)
 	{
 		uint32_t child = node->child_list_begin;
 		while(1)
 		{
-			ana_meta_loop_print(taxonomyTree, list, child_list[child].tid, child_list, level + 1, total_read_number);
+			ana_meta_loop_print(taxonomyTree, list, child_list[child].tid, child_list, level + 1, total_read_number, is_base);
 			if(child_list[child].next == 0)
 				break;
 			else
@@ -1285,10 +1331,10 @@ uint32_t ana_get_tid(RST *rst, int max_tid, FILE * rst_file_srt, int *eof_, TAXO
 
 static void ana_meta(char * rst_file_name, char * tax_file_name)
 {
-	fprintf(stderr, "Current read %s\t", rst_file_name);
+	printf("Current read %s\t", rst_file_name);
 	//PART 1: load result file
 	//char * rst_file_name = argv[1];
-	fprintf(stderr, "%s\t", rst_file_name);
+	printf("%s\t", rst_file_name);
 	FILE * rst_file_srt = xopen(rst_file_name, "rb");
 
 	//PART 2:load taxonomyTree
@@ -1400,10 +1446,10 @@ static void ana_meta(char * rst_file_name, char * tax_file_name)
 	}
 	//out put
 	printf("Data:\n");
-	ana_meta_loop_print(taxonomyTree, node_table, 1, child_list, 0, total_read_number);
+	ana_meta_loop_print(taxonomyTree, node_table, 1, child_list, 0, total_read_number, false);
 	//printf("</Data>\n");
 	//number
-	fprintf(stderr,"total_read_number :%d\t",total_read_number);
+	printf("total_read_number :%d\t",total_read_number);
 
 	//step3: end PRO
 	free(taxonomyTree);
@@ -1422,13 +1468,12 @@ static int cmp_base_sort(const void *a_, const void *b_){
 }
 
 #define MIN_SCORE 10
-
 static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 {
-	fprintf(stderr, "Current read %s\t", rst_file_name);
+	printf("Current read %s\t", rst_file_name);
 	//PART 1: load result file
 	//char * rst_file_name = argv[1];
-	fprintf(stderr, "%s\t", rst_file_name);
+	printf("%s\t", rst_file_name);
 	FILE * rst_file_srt = xopen(rst_file_name, "rb");
 
 	//PART 2:load taxonomyTree
@@ -1550,12 +1595,140 @@ static void ana_meta_base(char * rst_file_name, char * tax_file_name)
 	}
 	//out put
 	printf("Analysis based on base number:\n");
-	ana_meta_loop_print(taxonomyTree, node_table, 1, child_list, 0, total_base_num);
+	ana_meta_loop_print(taxonomyTree, node_table, 1, child_list, 0, total_base_num, false);
 	//printf("</Data>\n");
 	//number
-	fprintf(stderr,"total_mapped_base_number :%ld\n",total_base_num);
-	fprintf(stderr,"low identity read (identity <= 75%%) number :%ld\t",low_identity_read_num);
-	fprintf(stderr,"total base %ld\t", low_identity_read_base);
+	printf("total_mapped_base_number :%ld\n",total_base_num);
+	printf("low identity read (identity <= 75%%) number :%ld\t",low_identity_read_num);
+	printf("total base %ld\t", low_identity_read_base);
+	//step3: end PRO
+	free(taxonomyTree);
+	fclose(rst_file_srt);
+	//fclose(maf_file_srt);
+}
+
+typedef struct{
+	uint32_t tid;
+	uint64_t base;
+	uint64_t map_q;
+}NODE_BASE_Q;
+//all char that are more than '9' are use less than '9'
+static int cmp_base_Q(const void *a_, const void *b_){
+	NODE_BASE_Q *a = (NODE_BASE_Q*) a_, *b= (NODE_BASE_Q *) b_;
+	return a->base < b->base;
+}
+static void ana_meta_base_M2(char * rst_file_name, char * tax_file_name)
+{
+	printf("Current read %s\t", rst_file_name);
+	//PART 1: load result file
+	//char * rst_file_name = argv[1];
+	printf("%s\t", rst_file_name);
+	FILE * rst_file_srt = xopen(rst_file_name, "rb");
+
+	//PART 2:load taxonomyTree
+	//char * tax_file_name = argv[2];
+	TAXONOMY_rank * taxonomyTree = NULL;
+	int max_tid = taxonTree_rank(tax_file_name, &taxonomyTree);
+
+	//step3: analysis
+	NODE_BASE_Q *node_base = xcalloc(max_tid, sizeof(NODE_BASE_Q));
+	//CLY_NODE_V cly_v = {0,0,0};
+	//CLY_NODE root={"root", 1, "root", 0, NULL, NULL};
+
+	// = {"root", 0. "root", 0, NULL, NULL}
+	int total_read_number = 0;
+	uint64_t total_base_num = 0;
+	uint64_t low_identity_read_num = 0;
+	uint64_t low_identity_read_base = 0;
+	RST rst;
+	int eof_ = 0;//end of file
+	float coverage = 0;
+	//count all PRIMARY tax
+	if(getOneRST(rst_file_srt, &rst) < 0)
+		return;
+	while(1)
+	{
+		total_read_number++;
+		int read_len = 0;
+		//get all results for one read
+		int map_Q = rst.MAPQ;
+		uint32_t final_tid = ana_get_tid(&rst, max_tid, rst_file_srt, &eof_, taxonomyTree, &read_len, &coverage);
+		if(final_tid > 0)
+		{
+			if(coverage * read_len > MIN_SCORE)
+			{
+				total_base_num += read_len;
+				node_base[final_tid].base += read_len;
+				node_base[final_tid].map_q += read_len*map_Q;
+				if(coverage < 0.08)
+				{
+					low_identity_read_base += read_len;
+					low_identity_read_num++;
+				}
+			}
+		}
+		if(eof_ < 0)//end if file
+			break;
+	}
+
+	CLY_NODE *node_table = xcalloc(max_tid, sizeof(CLY_NODE));
+	CN_CHILD *child_list = xcalloc(max_tid*2, sizeof(CN_CHILD));
+	uint32_t child_count = 1;
+
+	NODE_BASE_Q *sort = xmalloc(max_tid* sizeof(NODE_BASE_Q));
+	int rst_num = 0;
+	for(uint32_t i = 0; i <= max_tid; i++)
+	{
+		if(node_base[i].base == 0)
+			continue;
+		sort[rst_num].tid = i;
+		sort[rst_num].base = node_base[i].base;
+		sort[rst_num++].map_q = node_base[i].map_q;
+	}
+	qsort(sort,rst_num,sizeof(NODE_BASE_Q), cmp_base_Q);
+
+	//calculate middle nodes
+	for(int i = 0; i < rst_num; i++)
+	{
+		uint32_t c_tid = sort[i].tid;
+		node_table[sort[i].tid].weight += node_base[sort[i].tid].base;
+		node_table[sort[i].tid].total_mapQ += node_base[sort[i].tid].map_q;
+		while(1)
+		{
+			uint32_t p_tid = taxonomyTree[c_tid].p_tid;
+			if(p_tid < 1 || p_tid == 4294967295)//over root node
+				break;
+			node_table[p_tid].weight += node_base[sort[i].tid].base;//add weight for p_tid
+			node_table[p_tid].total_mapQ += node_base[sort[i].tid].map_q;//add weight for p_tid
+			//store p_tid->c_tid
+			if(node_table[p_tid].child_list_begin == 0)
+			{
+				node_table[p_tid].child_list_begin = child_count++;
+				child_list[child_count - 1].tid = c_tid;
+			}
+			else
+			{
+				int list_begin = node_table[p_tid].child_list_begin;
+				while(child_list[list_begin].tid != c_tid && child_list[list_begin].next != 0)
+					list_begin = child_list[list_begin].next;
+				if(child_list[list_begin].tid != c_tid && child_list[list_begin].next == 0)//store new node
+				{
+					child_list[list_begin].next = child_count++;
+					child_list[child_count - 1].tid = c_tid;
+				}
+			}
+			//end, reset c_tid
+			c_tid = p_tid;
+		}
+	}
+	//out put
+	printf("Analysis based on base number:\n");
+	ana_meta_loop_print(taxonomyTree, node_table, 1, child_list, 0, total_base_num, true);
+	//printf("</Data>\n");
+	//number
+	printf("total_mapped_base_number :%ld\n",total_base_num);
+	printf("low identity read (identity <= 75%%) number :%ld\t",low_identity_read_num);
+	printf("total base %ld\t", low_identity_read_base);
 	//step3: end PRO
 	free(taxonomyTree);
 	fclose(rst_file_srt);
@@ -1677,7 +1850,7 @@ static void ana_meta_des_base(char * sam_file_name, char * tax_file_name)
 	//dump des sam
 	dump_des_sam_file(sam_file_name, temp_file_name);
 	//analysis
-	ana_meta_base(temp_file_name, tax_file_name);
+	ana_meta_base_M2(temp_file_name, tax_file_name);
 	xrm(temp_file_name);
 }
 
@@ -2213,6 +2386,57 @@ static void count_base(char * fastq_file_name)
 	fprintf(stderr, "%s read number: %ld base number %ld ( %f Mbp)\n", fastq_file_name, read_number, total_length, (float)total_length/1000000);
 }
 
+static void get_read_by_NAME(char * fastq_file_name , char * read_name)
+{
+	gzFile fp = xzopen(fastq_file_name, "r");
+	kstream_t *_fp = ks_init(fp);
+	kseq_t seq = {0};
+	seq.f = _fp;
+	while( kseq_read(&seq) >= 0)
+	{
+		if(strcmp(seq.name.s, read_name) == 0)
+			printf(	"@%s %s\n"
+					"%s\n"
+					"+\n"
+					"%s\n",
+					seq.name.s,
+					seq.comment.s,
+					seq.seq.s,
+					seq.qual.s);
+	}
+	gzclose(fp);
+}
+
+static void reverse_read(char * fastq_file_name)
+{
+	gzFile fp = xzopen(fastq_file_name, "r");
+	kstream_t *_fp = ks_init(fp);
+	kseq_t seq = {0};
+	seq.f = _fp;
+	uint64_t total_length = 0;
+	uint64_t read_number = 0;
+	while( kseq_read(&seq) >= 0)
+	{
+		read_number ++;
+		total_length += seq.seq.l;
+		for(int j = 0; j < seq.seq.l; j++)
+		{
+			char new_char = 'X';
+			switch(seq.seq.s[seq.seq.l - j - 1])
+			{
+			case 'A': new_char = 'T'; break;
+			case 'C': new_char = 'G'; break;
+			case 'G': new_char = 'C'; break;
+			case 'T': new_char = 'A'; break;
+			}
+			fprintf(stderr, "%c", new_char);
+		}
+		fprintf(stderr, "\n\n\n");
+	}
+	gzclose(fp);
+	fprintf(stderr, "%s read number: %ld base number %ld ( %f Mbp)\n", fastq_file_name, read_number, total_length, (float)total_length/1000000);
+}
+
 static void split_fastq(char * fastq_file_name, int begin, int step)
 {
 	gzFile fp = xzopen(fastq_file_name, "r");
@@ -2439,6 +2663,8 @@ int simDataTest(int argc, char *argv[])
 	else if	(0 == strcmp(argv[1], "ana_sam_filter"))	{ana_tax_SAM_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "ana_paf_filter"))	{ana_tax_PAF_filter(	argv[2], strtoul(argv[3],0,10), argv[4], argv[5], argv[6]);}
 	else if	(0 == strcmp(argv[1], "count_base"))		{count_base(	argv[2]);}
+	else if	(0 == strcmp(argv[1], "get_read_by_NAME"))	{get_read_by_NAME(	argv[2], argv[3]);}
+	else if	(0 == strcmp(argv[1], "reverse_read"))		{reverse_read(	argv[2]);}
 	else if	(0 == strcmp(argv[1], "cen_map"))			{get_centrifuge_map_file(	argv[2]);}
 	else if	(0 == strcmp(argv[1], "split_fastq"))		{split_fastq(	argv[2], strtoul(argv[3],0,10), strtoul(argv[4],0,10));}
 	else if	(0 == strcmp(argv[1], "pacbio_filter"))		{pacbio_filter(	argv[2]);}

@@ -280,7 +280,7 @@ void output_one_result_sam(DA_IDX *idx, cly_r *p_rst, int output_seq,  MAP_opt *
 			"%s\t"
 			"%s\t"
 			"AS:i:%d\t"//number of mapping 9-mers, used as score
-			"di:i:%d\t"//sum number of big deletion and insertions(only an es30timated value)
+			//"di:i:%d\t"//sum number of big deletion and insertions(only an es30timated value)
 			"\n",
 			p_rst->read->name.s,
 			flag,
@@ -290,8 +290,8 @@ void output_one_result_sam(DA_IDX *idx, cly_r *p_rst, int output_seq,  MAP_opt *
 			c_s->q_st, c_s->q_ed - c_s->q_st, read_l - c_s->q_ed,
 			seq_s,
 			qual_s,
-			c_s->sum_score,
-			c_s->indel
+			c_s->sum_score
+			//c_s->indel
 	);
 	//supplementary and secondary
 	int rst_cnt = 0;
@@ -327,7 +327,7 @@ void output_one_result_sam(DA_IDX *idx, cly_r *p_rst, int output_seq,  MAP_opt *
 					"*\t"
 					"*\t"
 					"AS:i:%d\t"//number of mapping 9-mers, used as score
-					"di:i:%d\t"//sum number of big deletion and insertions(only an estimated value)
+					//"di:i:%d\t"//sum number of big deletion and insertions(only an estimated value)
 					"\n",
 					p_rst->read->name.s,
 					flag,
@@ -335,8 +335,8 @@ void output_one_result_sam(DA_IDX *idx, cly_r *p_rst, int output_seq,  MAP_opt *
 					c->t_st,
 					mapQ,
 					c->q_st, (loop == 0)?'H':'S', c->q_ed - c->q_st, read_l - c->q_ed, (loop == 0)?'H':'S',
-					c->sum_score,
-					c->indel
+					c->sum_score
+					//c->indel
 				);
 			}
 		}
@@ -457,16 +457,19 @@ static void classify_usage()
 	fprintf(stderr, "    [ReadFiles.fa]  FILES    reads files, FASTQ(A) format, separated by space\n");
 	fprintf(stderr, "  Options:\n");
 	fprintf(stderr, "    -h,             help\n");
+	//fprintf(stderr, "    -u,             run in \"Strain mode\": this mode will increase strain\n");
+	//fprintf(stderr, "                    level classification sensitivity and accuracy, but the speed\n");
+	//fprintf(stderr, "                    may be slower.\n");
 	fprintf(stderr, "    -t, INT         number of threads[4]\n");
 	fprintf(stderr, "    -l, INT         minimum matching length, ignored for NGS reads [170]\n");
 	fprintf(stderr, "    -r, INT         max Output number of secondary alignments[5]\n");
 	fprintf(stderr, "    -o, FILE        output results into file [stdout]\n");
-	fprintf(stderr, "    -s, FILE        MIN score[45]\n");
+	fprintf(stderr, "    -s, INT         MIN score[64]\n");
 	fprintf(stderr, "    -f, STR         output format, one of:\n");
-	fprintf(stderr, "                    - SAM: SAM without SEQ and QUAL, default\n");
-	fprintf(stderr, "                    - SAM_FULL: normal SAM\n");
+	fprintf(stderr, "                    - SAM: SAM-like results without SEQ and QUAL and header, default\n");
+	fprintf(stderr, "                    - SAM_FULL: SAM-like results with SEQ and QUAL\n");
 	fprintf(stderr, "                    - DES: smallest format\n");
-	fprintf(stderr, "                    - DES_FULL: all results are showed, ignore '-r' option\n");
+	fprintf(stderr, "                    - DES_FULL: all results are showed, ignore '-r' opinion\n");
 	fprintf(stderr, "\n");
 	//fprintf(stderr, "Options:   -e,           Error rate[0.85]\n");
 	//fprintf(stderr, "Options:   -a,           Output all results\n");
@@ -480,11 +483,12 @@ int classify_main(int argc, char *argv[])
 {//only use one thread, random means random seed
 	double P_E = 0.15;//ERROR rate
 	int c = 0;
-	MAP_opt o = {170, 4, 5, OUTPUT_MODE_SAM, false, stdout, 57};
+	MAP_opt o = {170, 4, 5, OUTPUT_MODE_SAM, false, stdout, 64};//, false};
 	while((c = getopt(argc, argv, "ht:l:r:f:o:s:")) >= 0)
 	{
 		     if(c == 'h') {classify_usage(); return 0;}
 		else if(c == 't') o.thread_num = (int)atoi(optarg);
+		//else if(c == 'u') o.strain_mode = true;
 		else if(c == 'l') o.L_min_matching = (int)atoi(optarg);
 		else if(c == 'r') o.max_sec_N = (int)atoi(optarg);
 		else if(c == 'o') o.outfile = xopen(optarg, "w");
@@ -517,6 +521,7 @@ int classify_main(int argc, char *argv[])
 	idx.filter_min_length = o.L_min_matching;
 	idx.filter_min_score = o.min_score;
 	idx.filter_min_score_LV3 = o.min_score + 10;
+	//idx.strain_mode = o.strain_mode;
 	idx.mapQ.Q_MEM = xmalloc_t(int, Q_MEM_MAX);
 	idx.mapQ.Q_LV  = (int (*)[MAX_LV_R_LEN])xmalloc(MAX_LV_WRONG*MAX_LV_R_LEN*sizeof(int));
 	calculate_MAPQ_TABLE(idx.mapQ.Q_MEM, idx.mapQ.Q_LV, P_E, idx.ref_bin.n*4);

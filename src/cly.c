@@ -60,7 +60,7 @@ static int inline chain_cmp_by_MEM_score(const void * a_, const void * b_)
 		return 1;
 	if(score_a > score_b)
 		return -1;
-	return 0;
+	return (a->sum_score%2);
 }
 
 typedef struct
@@ -223,17 +223,117 @@ static inline void chain_insert_M2(Anchor * anchor, chain_set *c)
 	chain_insert_meta(anchor, new_c, true, dis_minus);
 }
 
+static int inline Anchor_cmp_by_chr_ID_and_pos(const void*a_, const void*b_)
+{
+	Anchor *a = (Anchor *)a_;
+	Anchor *b = (Anchor *)b_;
+	if(a->ref_ID != b->ref_ID)
+		return a->ref_ID > b->ref_ID;
+	if(a->direction != b->direction)
+		return a->direction > b->direction;
+	return a->ref_offset > b->ref_offset;
+}
+
+#define MAX_ANCHOR_OVERLAP 3
+static inline void chain_insert_M3(Anchor_V * anchor_v, chain_set *c)
+{
+	int score_v[1024];// score for SDP
+	Anchor * anchor_st = anchor_v->a, *anchor_ed = anchor_st + anchor_v->n;
+	//sort anchor by chr_ID and pos
+	qsort(anchor_st, anchor_v->n, sizeof(Anchor), Anchor_cmp_by_chr_ID_and_pos);
+	//SDP
+	for(Anchor *chr_st = anchor_st; chr_st < anchor_ed;)
+	{
+		//search same chrID anchor
+		Anchor *chr_ed = chr_st + 1, *c_a;
+		uint32_t ref_ID = chr_st->ref_ID;
+		uint32_t direction = chr_st->direction;
+		for(;	chr_ed < anchor_ed &&
+				chr_ed->ref_ID == ref_ID &&
+				chr_ed->direction == direction &&
+				chr_ed[0].ref_offset - chr_ed[-1].ref_offset < 2000;//waiting at most 2000 bp
+				chr_ed++);
+		if(chr_ed - chr_st > 1024) chr_ed = chr_st + 1024; //at most 1024 anchors one time
+		//SDP
+		Anchor *max_anchor = NULL; int max_score = 0, anchor_max_score;
+		for(c_a = chr_st; c_a < chr_ed; c_a++)
+		{
+			c_a->chain_anchor_pre = NULL;
+			anchor_max_score = c_a->a_m.score;
+			uint32_t max_t = c_a->ref_offset + MAX_ANCHOR_OVERLAP;
+			uint32_t max_q = c_a->index_in_read + MAX_ANCHOR_OVERLAP;
+			for(Anchor * pre = c_a - 1; pre >= chr_st; pre--)
+			{
+				if(pre->index_in_read + pre->a_m.mtch_len > max_q)//overlap query
+					continue;
+				if(pre->ref_offset + pre->a_m.mtch_len > max_t)//overlap target
+					continue;
+				if(pre->index_in_read + 1000 < max_q)//overlap query
+					break;
+				if(pre->ref_offset + 1000 < max_t)//overlap target
+					break;
+				int indel = pre->index_in_read - pre->ref_offset - (max_q - max_t);
+				int ABS_indel = ABS(indel);
+				if(ABS_indel > 200)
+					continue;
+				int new_score = score_v[pre - chr_st] + c_a->a_m.mtch_len - (ABS_indel >> 4) - ((max_q - pre->index_in_read) >> 8);
+				if(new_score > anchor_max_score)
+				{
+					anchor_max_score = new_score;
+					c_a->chain_anchor_pre = pre;
+				}
+			}
+			score_v[c_a - chr_st] = anchor_max_score;
+			if(max_score < anchor_max_score)
+			{
+				max_score = anchor_max_score;
+				max_anchor = c_a;
+			}
+		}
+		//new chain
+		int sum_INDEL = 0, anchor_number = 1; Anchor * pre = max_anchor;//search forward
+		int sum_score = (max_anchor->duplicate)?1:max_anchor->a_m.score;
+		bool with_top = !max_anchor->anchor_useless;
+		for(; pre->chain_anchor_pre != NULL; anchor_number++)
+		{
+			Anchor * pre_ = (Anchor *)pre->chain_anchor_pre;
+			sum_INDEL += (pre->index_in_read - pre_->index_in_read) - (pre->ref_offset - pre_->ref_offset);
+			with_top |= (!pre->anchor_useless);
+			sum_score += (pre->duplicate)?1:pre->a_m.score;
+			pre = pre_;
+		}
+		chain_item *new_c;
+		kv_pushp_2(chain_item, c, new_c);
+		new_c->chain_id = c->n - 1;
+		new_c->ref_ID = ref_ID;
+		new_c->direction = direction;
+		new_c->q_t_dis = max_anchor->ref_offset - max_anchor->index_in_read;
+		new_c->t_st = pre->ref_offset;
+		new_c->t_ed = max_anchor->ref_offset + max_anchor->a_m.mtch_len;
+		new_c->q_st = pre->index_in_read;
+		new_c->q_ed = max_anchor->index_in_read + max_anchor->a_m.mtch_len;
+		new_c->with_top_anchor = with_top;
+		new_c->anchor_number = anchor_number;
+		new_c->sum_score = sum_score;
+		new_c->indel = sum_INDEL;
+		new_c->chain_anchor_cur = max_anchor;
+		//end
+		chr_st = chr_ed;
+	}
+}
+
 #define MAX_hit_len 500
 void resolve_tree(cly_r *results)
 {
 	int kmer_con_index;
 	results->hit.n = 0;
 	Anchor * anchor_st = results->anchor_v.a, *anchor_ed = anchor_st + results->anchor_v.n;
-	if(results->anchor_v.n < 300)
+	if(results->anchor_v.n < 50)
 		for(Anchor * anchor = anchor_st; anchor < anchor_ed; anchor++)
 			chain_insert_M2(anchor, &(results->hit));
 	else
-	{
+		chain_insert_M3(&(results->anchor_v), &(results->hit));
+	if(0){//M1
 		kmer_con_index = 512;
 		CI_hash ci_hash[2048];
 		memset(ci_hash, 0, 512*sizeof(CI_hash) + 1);
@@ -623,8 +723,8 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 		uint8_t *q_suf;
 		uint8_t t_suf[LV_L + 1];
 		//at most read 12 bp
-		if(q_off < -1)
-			printf(" ");
+		//if(q_off < -1)
+		//	printf(" ");
 		l_pre = MIN(q_off + 1, LV_L);
 		for(uint8_t k = 0; k < l_pre; k++)
 			q_pre[k] = q_b[q_off - k];
@@ -740,37 +840,46 @@ int32_t map_seed(DA_IDX * idx, MEM_rst* m_r, SEED_INFO *s_i, Anchor_V *anchor_v,
 		bool ref_search_l = (l_pre < LV_L || d_pre == 0)?true:false;//when edit distance is 0, means that extension is not over
 		bool ref_search_r = (l_suf < LV_L || d_suf == 0)?true:false;
 		uint8_t duplicate = false;
-
 		if(r_p_e - r_p_s > 50)//handle super repeat
 		{
-			super_repeat[0]++;
-			if(r_p_e - r_p_s > 200)
+//			super_repeat[0]++;
+//			if(idx->strain_mode == false)
+//			{
+//				if(r_p_e - r_p_s > 200)
+//				{
+//					super_repeat[1]+=2;
+//					super_repeat[1] = MIN(6, super_repeat[1]);
+//				}
+//				else
+//				{
+//					super_repeat[1] = MAX(1,super_repeat[1]);
+//					super_repeat[1]--;
+//				}
+//				if(super_repeat[1] > 2)//random select when super repeat
+//				{
+//					duplicate = true;
+//					int block_len = r_p_e - r_p_s;
+//					int random_begin = (anchor_v->n*71) % block_len;
+//					r_p_s += random_begin;//get 10 random results (by current anchor_v->n)
+//					r_p_e = MIN(r_p_s + 10, r_p_e);
+//				}
+//				//else do nothing (40~300)
+//				else if(r_p_e - r_p_s < 200 && ((anchor_v->n < 150) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
+//				{
+//					r_p_e += 0;
+//				}//delete all when not-super repeat nor beginning
+//				else
+//				{
+//					r_p_e = r_p_s;
+//					return 50;
+//				}
+//			}
+//			else
 			{
-				super_repeat[1]+=2;
-				super_repeat[1] = MIN(6, super_repeat[1]);
-			}
-			else
-			{
-				super_repeat[1] = MAX(1,super_repeat[1]);
-				super_repeat[1]--;
-			}
-			if(super_repeat[1] > 2)//random select when super repeat
-			{
-				duplicate = true;
-				int block_len = r_p_e - r_p_s;
-				int random_begin = (anchor_v->n*71) % block_len;
-				r_p_s += random_begin;//get 10 random results (by current anchor_v->n)
-				r_p_e = MIN(r_p_s + 10, r_p_e);
-			}
-			//else do nothing (40~300)
-			else if(r_p_e - r_p_s < 200 && ((anchor_v->n < 150) || (super_repeat[0] % 16) == 15))//select all when anchors not enough
-			{
-				r_p_e += 0;
-			}//delete all when not-super repeat nor beginning
-			else
-			{
-				r_p_e = r_p_s;
-				return 50;
+				if(r_p_e - r_p_s < 1000)//select all when anchors not enough
+					r_p_e += 0; //do nothing
+				else
+					return 50;
 			}
 		}
 		//if(r_p_e - r_p_s > 40 && anchor_v->n > 30)//ignore results when too many of then
@@ -917,8 +1026,14 @@ void get_seed_vector(E_KMER* ek, uint8_t * bin_read, uint64_t* kmer_buff, uint32
 	uint32_t total_score = 0;
 	//top 1 in 100 bp will be labeled
 	int max_index = 0;	uint32_t max_length = 0;	uint32_t index_end = SEED_RANGE;
+
+	//if(direction == REVERSE)
+	//	for(uint32_t m = 0; m < l_seed_v; m++)
+	//		seed_v[m].offset += ek->len_e_kmer + seed_v[m].len;
+
 	for(uint32_t m = 0; m < l_seed_v; m++)
 	{
+		seed_v[m].top = 0;
 		if(seed_v[m].offset < index_end)
 		{
 			if(max_length < seed_v[m].len)
@@ -942,6 +1057,176 @@ void get_seed_vector(E_KMER* ek, uint8_t * bin_read, uint64_t* kmer_buff, uint32
 	total_score += max_length;//the last one
 	SEARCH_DIR search_dir = {seed_v, l_seed_v, bin_read, kmer_buff, direction, total_score};
 	search_dir_[0] = search_dir;
+
+
+	//for(uint32_t m = 0; m < l_seed_v; m++)
+	//	fprintf(stderr, "%d %d %d %d\n", seed_v[m].len, seed_v[m].offset, seed_v[m].top, 9913 - seed_v[m].offset);
+	//fprintf(stderr, "1^^^\n\n");
+}
+
+uint32_t search_exist_kmer_M2(
+		uint64_t* kmer_v,
+		uint32_t l_kmer_v,
+		CLY_seed *seed_v,
+		uint8_t* e_1,
+		uint8_t* e_2,
+		uint64_t hash_mask,
+		uint32_t direction)
+{
+	uint32_t l_seed_v = 0;
+	if(direction == FORWARD)	//forward
+	{
+		for(uint32_t i = STEP_EK - 1; i < l_kmer_v; i += STEP_EK)
+		{
+			//search e_k_table	//200ns
+			if(get_exist_kmer(e_1, e_2, kmer_v[i], hash_mask) == 1)
+			{//kmer exist
+				uint32_t offset = i, len = 1;
+				for(int j = 1; j < STEP_EK; ++j)
+				{// 1 2 3 4	//search backward
+					if(get_exist_kmer(e_1, e_2, kmer_v[i - j], hash_mask) == 1)
+					{
+						offset--;
+						len++;
+					}
+					else
+						break;
+				}
+				for(int j = 1; i + j < l_kmer_v; ++j)
+				{// 1 2 3 4 //200ns //search forward, as long as possible
+					if(get_exist_kmer(e_1, e_2, kmer_v[i + j], hash_mask) == 1)
+					{
+						len++;
+						if(len > 60)
+						{
+							i += 50;
+							break;
+						}
+					}
+					else
+						break;
+				}
+				seed_v[l_seed_v].offset = offset;
+				seed_v[l_seed_v].len = len;//store rst
+				l_seed_v ++;
+				i = offset + len; //reset i, ignore covered kmers
+			}
+		}
+	}
+	else//reverse
+	{
+		for(int i = l_kmer_v - STEP_EK; i >= 0; i -= STEP_EK)
+		{
+			//search e_k_table	//200ns
+			if(get_exist_kmer(e_1, e_2, kmer_v[i], hash_mask) == 1)
+			{//kmer exist
+				uint32_t offset = i, len = 1;
+				for(int j = 1; j < STEP_EK; ++j)
+				{// 1 2 3 4	//search FORWARD
+					if(get_exist_kmer(e_1, e_2, kmer_v[i + j], hash_mask) == 1)
+					{
+						offset++;
+						len++;
+					}
+					else
+						break;
+				}
+				for(int j = 1; j <= i; ++j)
+				{// 1 2 3 4 //200ns //search forward, as long as possible
+					if(get_exist_kmer(e_1, e_2, kmer_v[i - j], hash_mask) == 1)
+					{
+						len++;
+						if(len > 60)
+						{
+							i += 50;
+							break;
+						}
+					}
+					else
+						break;
+				}
+				seed_v[l_seed_v].offset = offset - len + 1;
+				seed_v[l_seed_v].len = len;//store rst
+				l_seed_v ++;
+				i = offset - len; //reset i, ignore covered kmers
+			}
+		}
+	}
+	return l_seed_v;
+}
+
+void get_seed_vector_M2(E_KMER* ek, uint8_t * bin_read, uint64_t* kmer_buff, uint32_t l_kmer_buff,
+		CLY_seed* seed_v, uint32_t direction, SEARCH_DIR *search_dir_)
+{
+	store_kmers(bin_read, l_kmer_buff, ek->len_e_kmer, ek->single_base_max, kmer_buff);
+	uint32_t l_seed_v = search_exist_kmer_M2(kmer_buff, l_kmer_buff, seed_v, ek->e_kmer0, ek->e_kmer1, ek->e_kmer_hash_mask, direction);
+	uint32_t total_score = 0;
+	//top 1 in 100 bp will be labeled
+	int max_index = 0;	uint32_t max_length = 0;	uint32_t index_end = SEED_RANGE;
+
+	//if(direction == REVERSE)
+	//	for(uint32_t m = 0; m < l_seed_v; m++)
+	//		seed_v[m].offset += ek->len_e_kmer + seed_v[m].len;
+	if(direction == FORWARD)
+	{
+		for(uint32_t m = 0; m < l_seed_v; m++)
+		{
+			seed_v[m].top = 0;
+			if(seed_v[m].offset < index_end)
+			{
+				if(max_length < seed_v[m].len)
+				{
+					max_length = seed_v[m].len;
+					max_index = m;
+				}
+				seed_v[max_index].top = false;
+			}
+			else
+			{
+				seed_v[max_index].top = true;
+				index_end += SEED_RANGE;
+				total_score += max_length;
+				max_length = 0;
+				max_index = m;
+				max_length = seed_v[m].len;
+			}
+		}
+	}
+	else//reverse
+	{
+		for(uint32_t m = 0; m < l_seed_v; m++)
+		{
+			seed_v[m].top = 0;
+			if(l_kmer_buff - seed_v[m].offset - seed_v[m].len < index_end)
+			{
+				if(max_length < seed_v[m].len)
+				{
+					max_length = seed_v[m].len;
+					max_index = m;
+				}
+				seed_v[max_index].top = false;
+			}
+			else
+			{
+				seed_v[max_index].top = true;
+				index_end += SEED_RANGE;
+				total_score += max_length;
+				max_length = 0;
+				max_index = m;
+				max_length = seed_v[m].len;
+			}
+		}
+	}
+
+	seed_v[max_index].top = true;
+	total_score += max_length;//the last one
+	SEARCH_DIR search_dir = {seed_v, l_seed_v, bin_read, kmer_buff, direction, total_score};
+	search_dir_[0] = search_dir;
+
+
+	//for(uint32_t m = 0; m < l_seed_v; m++)
+	//	fprintf(stderr, "%d %d %d %d\n", seed_v[m].len, seed_v[m].offset, seed_v[m].top, 9913 - seed_v[m].offset);
+	//fprintf(stderr, "1^^^\n\n");
 }
 
 void getIsland(kseq_t *read, Classify_buff_pool *buff, E_KMER* ek, SEARCH_DIR *search_dir)
@@ -960,7 +1245,7 @@ void getIsland(kseq_t *read, Classify_buff_pool *buff, E_KMER* ek, SEARCH_DIR *s
 	CLY_seed* seed_v_F 		= buff->seed_v;
 	for(uint32_t k = 0; k < read_len; ++k)
 		bin_read_F[k] 		= CLY_Bit[(int8_t)useRead[k]];//get bin read string
-	get_seed_vector(ek, bin_read_F, kmer_buff_F, l_kmer_buff, seed_v_F, FORWARD, search_dir);
+	get_seed_vector_M2(ek, bin_read_F, kmer_buff_F, l_kmer_buff, seed_v_F, FORWARD, search_dir);
 ///reverse
 #ifndef CONSIDER_BOTH_ORIENTATION
 	uint8_t * bin_read_R 	= buff->bin_read + read_len;
@@ -968,7 +1253,7 @@ void getIsland(kseq_t *read, Classify_buff_pool *buff, E_KMER* ek, SEARCH_DIR *s
 	CLY_seed* seed_v_R 		= buff->seed_v + (read_len >> 2);
 	for(uint32_t k = 0; k < read_len; ++k)
 		bin_read_R[read_len - k - 1] = 3 - bin_read_F[k];//get the bin reverse read string
-	get_seed_vector(ek, bin_read_R, kmer_buff_R, l_kmer_buff, seed_v_R, REVERSE, search_dir + 1);
+	get_seed_vector_M2(ek, bin_read_R, kmer_buff_R, l_kmer_buff, seed_v_R, REVERSE, search_dir + 1);
 	if(search_dir[0].total_score < search_dir[1].total_score)
 	{
 		SEARCH_DIR swap = search_dir[0];
@@ -1231,7 +1516,8 @@ int fast_classify(
 			{
 				c_mr->read_offset = string_index - c_mr->match_len;
 				int c_score = map_seed(idx, c_mr, &s_i, &(results->anchor_v), super_repeat);
-				max_score = MAX(c_score, max_score);//TODO:::
+				max_score = MAX(c_score, max_score);
+				//fprintf(stderr, "A:%ld-%d-%d-%d ", results->anchor_v.n, max_score, c_mr->match_len, c_mr->read_offset);
 			}
 			if(max_score > 35)
 				j -= 7;
@@ -1251,6 +1537,7 @@ int fast_classify(
 		for(Anchor * anc_c = a_b; anc_c < a_e; anc_c++)
 			anc_c->anchor_useless = (anc_c->a_m.score < top_score)?true:false;
 	}
+	//fprintf(stderr, "XXXXXXXXXXXXXX\n\n");
 	return super_repeat[0];
 }
 
@@ -2073,7 +2360,7 @@ void sdp_match(uint32_t q_bg, uint32_t q_ed, uint8_t *q_str, uint8_t *t_str, uin
 						int back_len = MEM_search(q_str + q_pos - 1, c_t_str - 1, false, 4);
 						//back_len == 4:skip
 						//back_len < 4; back_len = back_len;
-						if(back_len < 4)//filter 4
+						if(back_len < 4 || i== 4)//filter 4
 						{
 							//search forward
 							uint32_t max_search = q_ed - q_pos - 1;
@@ -2122,7 +2409,7 @@ void sdp_match(uint32_t q_bg, uint32_t q_ed, uint8_t *q_str, uint8_t *t_str, uin
 						int forward_len = MEM_search(q_str + q_pos + S_A_KEMR_L, c_t_str + S_A_KEMR_L, true, 4);
 						//forward_len == 4:skip
 						//forward_len < 4; forward_len = forward_len;
-						if(forward_len < 4)//filter 3
+						if(forward_len < 4 || i == 4)//filter 3
 						{
 							//search forward
 							uint32_t max_search = q_pos;//query restriction: 0 ~ q_pos
@@ -2146,10 +2433,10 @@ void sdp_match(uint32_t q_bg, uint32_t q_ed, uint8_t *q_str, uint8_t *t_str, uin
 			}
 		}
 	}
-
 }
 
-#define MAX_sms_overlap (1)
+#define MAX_sms_overlap (6)
+#define MAX_sms_overlap_middle (6)
 int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_HASH *sa_hash, int key_len)
 {
 	int score = 10000;//basic score: 100
@@ -2173,16 +2460,18 @@ int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str
 			kv_pushp_2(spd_match, sms, spd_p);
 			spd_p->score = score;
 			spd_p->q_pos = pre_a->index_in_read;
-			spd_p->t_pos = pre_refoffset;
-			spd_p->len   = - S_A_KEMR_L;
+			spd_p->t_pos = pre_a->ref_offset;
+			spd_p->len   = pre_a->a_m.mtch_len - S_A_KEMR_L + 1;
 			if(total_ref_len > 12)
 			{
 				//get reference
 				uint8_t ref[2000];//get ref
-				xassert(total_ref_len < 2000, "");//todo::
+				xassert(total_ref_len < 2000, "");
 				uint64_t ref_offset = pre_refoffset + t_offset + pre_mch;
 				get_ref(idx->ref_bin.a, ref, ref_offset, total_ref_len, true);
-				sdp_match(pre_a->index_in_read + pre_mch - 8, c_a->index_in_read - 1, q_str, ref, total_ref_len, key_len, sa_hash, sms, pre_refoffset + pre_mch, true);//todo: store the first node
+				sdp_match(pre_a->index_in_read + pre_mch - 8, c_a->index_in_read - 1,
+						q_str, ref, total_ref_len, key_len, sa_hash, sms,
+						pre_refoffset + pre_mch, true);
 			}
 			//push end node
 			kv_pushp_2(spd_match, sms, spd_p);
@@ -2196,21 +2485,30 @@ int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str
 				for(; c_spd < spd_ed; c_spd++)
 				{
 					int max_score = c_spd->len;
-					uint32_t max_q = c_spd->q_pos - MAX_sms_overlap;
-					uint32_t max_t = c_spd->t_pos - MAX_sms_overlap;
+					uint32_t max_q = c_spd->q_pos + MAX_sms_overlap_middle;
+					uint32_t max_t = c_spd->t_pos + MAX_sms_overlap_middle;
 
 					for(spd_match * c_pre_sms = c_spd - 1; c_pre_sms >= sms->a; c_pre_sms--)
 					{
 						//condition1~5 that can`t be chained together, condition 4 will break loop:
-						if(c_pre_sms->q_pos + c_pre_sms->len > max_q)//overlap query
+						int pre_q_ed = c_pre_sms->q_pos + c_pre_sms->len + S_A_KEMR_L - 1;
+						int pre_t_ed = c_pre_sms->t_pos + c_pre_sms->len + S_A_KEMR_L - 1;
+						if(pre_q_ed > max_q)//overlap query
 							continue;
-						if(c_pre_sms->t_pos + c_pre_sms->len > max_t)//overlap target
+						if(pre_t_ed > max_t)//overlap target
 							continue;
 						int indel = c_pre_sms->q_pos - c_pre_sms->t_pos - (max_q - max_t);
 						int ABS_indel = ABS(indel);
 						if(ABS_indel > 200)
 							continue;
 						int new_score = c_pre_sms->score + c_spd->len - (ABS_indel >> 3);
+						//overlap
+						if(pre_q_ed > c_spd->q_pos || pre_t_ed > c_spd->t_pos)
+						{
+							int overlap_q = pre_q_ed - c_spd->q_pos;
+							int overlap_t = pre_t_ed - c_spd->t_pos;
+							new_score -= MAX(overlap_q, overlap_t);
+						}
 						max_score = MAX(max_score, new_score);
 					}
 					score = MAX(max_score, score);
@@ -2219,9 +2517,9 @@ int sdp_middle_M2(Anchor * c_a, DA_IDX * idx, spd_match_set* sms, uint8_t *q_str
 			}
 		}
 		else	//final one
-		{
 			score += c_a->a_m.mtch_len - S_A_KEMR_L + 1;
-		}
+		//fprintf(stderr, "%d-%d-%d", score, c_a->a_m.mtch_len - S_A_KEMR_L + 1, c_a->index_in_read);
+		//if(pre_a != NULL)fprintf(stderr, "-%d-%d\n", pre_a->a_m.mtch_len - S_A_KEMR_L + 1, pre_a->index_in_read);else fprintf(stderr, "\n");
 		c_a = pre_a;
 	}
 	return score - 10000;//delete basic score: 100
@@ -2245,7 +2543,7 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 	spd_p->score = score_ori;
 	spd_p->q_pos = c_h->q_ed;
 	spd_p->t_pos = c_h->t_ed;
-	spd_p->len   = - S_A_KEMR_L;
+	spd_p->len   = 1 - S_A_KEMR_L;
 	uint32_t current_sms = 1;
 
 	//t offset
@@ -2273,11 +2571,10 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 			}
 			else
 				max_search_ref = t_length - c_t_offset;
-			max_search_ref = MIN(600, max_search_ref);//load 600 bp for most
+			max_search_ref = MIN(600, max_search_ref);//load 600 bp at most
 			get_ref(idx->ref_bin.a, ref, c_t_offset + t_offset_global, max_search_ref + OVER_SEARCH_M2, true);
-			uint32_t max_search_read = MIN(c_h->q_ed + 4000, l_read);//from q_end to at most 4000
-			max_search_ref = MIN(max_search_ref, max_search_read - c_h->q_ed + 60);//restrict max search ref when reach end of reads
-			//debug_print_ACGTstring(q_str +  c_h->q_ed, max_search_read - c_h->q_ed);//todo
+			//uint32_t max_search_read = MIN(c_h->q_ed + 4000, l_read);//from q_end to at most 4000
+			//debug_print_ACGTstring(q_str +  c_h->q_ed, max_search_read - c_h->q_ed);
 			//debug_print_ACGTstring(ref, max_search_ref);//todo
 
 			//all read
@@ -2286,9 +2583,11 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 			//uint8_t all_ref[30001];
 			//get_ref(idx->ref_bin.a, all_ref, t_offset_global, 30000, true);//from c_t_offset - max_search_ref + 1 to c_t_offset
 			//debug_print_ACGTstring(all_ref, 30000);
-
-
-			sdp_match(c_h->q_ed - 8, max_search_read, q_str, ref, max_search_ref, key_len, sa_hash, sms ,c_t_offset, true);
+			int search_q_ed = (int)sms->a[max_sms_id].q_pos + 1000;
+			search_q_ed = MIN(search_q_ed, l_read);
+			int search_q_st = MAX(search_q_ed - 2000, c_h->q_st - 8);
+			//max_search_ref = MIN(max_search_ref, search_q_ed - c_h->q_ed + 60);//restrict max search ref when reach end of reads
+			sdp_match(search_q_st, search_q_ed, q_str, ref, max_search_ref, key_len, sa_hash, sms ,c_t_offset, true);
 			c_t_offset += max_search_ref - S_A_KEMR_L - 3;
 
 			//when load no new node
@@ -2303,18 +2602,20 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 		spd_match *c_sms = sms->a + current_sms++;
 		//SDP, get max score for that new node
 		int max_score = c_sms->len;
-		uint32_t max_pre_q = c_sms->q_pos - MAX_sms_overlap;
-		uint32_t max_pre_t = c_sms->t_pos - MAX_sms_overlap;
+		uint32_t max_pre_q = c_sms->q_pos + MAX_sms_overlap;
+		uint32_t max_pre_t = c_sms->t_pos + MAX_sms_overlap;
 		spd_match *c_sms_ed = sms->a, *c_pre_sms = sms->a + current_sms - 2;
 		for(; c_pre_sms >= c_sms_ed; c_pre_sms--)
 		{
+			int pre_q_ed = c_pre_sms->q_pos + c_pre_sms->len  + S_A_KEMR_L - 1;
+			int pre_t_ed = c_pre_sms->t_pos + c_pre_sms->len  + S_A_KEMR_L - 1;
 			//condition1~5 that can`t be chained together, condition 4 will break loop:
-			if(c_pre_sms->q_pos + c_pre_sms->len > max_pre_q)//overlap query
+			if(pre_q_ed > max_pre_q)//overlap query
 				continue;
-			if(c_pre_sms->t_pos + c_pre_sms->len > max_pre_t)//overlap target
+			if(pre_t_ed > max_pre_t)//overlap target
 				continue;
-			if(c_pre_sms->q_pos + 600 < max_pre_q)//query waiting length too long
-				break;
+			//if(c_pre_sms->q_pos + 600 < max_pre_q)//query waiting length too long
+			//	break;
 			if(c_pre_sms->t_pos + 600 < max_pre_t)//target waiting length too long
 				break;//should be break
 			int indel = c_pre_sms->q_pos - c_pre_sms->t_pos - (max_pre_q - max_pre_t);
@@ -2322,6 +2623,13 @@ int sdp_right_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_
 			if(ABS_indel > 200)
 				continue;
 			int new_score = c_pre_sms->score + c_sms->len - (ABS_indel >> 3);
+			//overlap
+			if(pre_q_ed > c_sms->q_pos || pre_t_ed > c_sms->t_pos)
+			{
+				int overlap_q = pre_q_ed - c_sms->q_pos;
+				int overlap_t = pre_t_ed - c_sms->t_pos;
+				new_score -= MAX(overlap_q, overlap_t);
+			}
 			max_score = MAX(max_score, new_score);
 		}
 		c_sms->score = max_score;
@@ -2413,7 +2721,7 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 				get_ref(idx->ref_bin.a, ref, c_t_offset + t_offset_global - max_search_ref, max_search_ref, true);//from c_t_offset - max_search_ref + 1 to c_t_offset
 			else
 				get_ref(idx->ref_bin.a, ref, c_t_offset + t_offset_global - max_search_ref - OVER_SEARCH_M2, max_search_ref + OVER_SEARCH_M2, true);//from c_t_offset - max_search_ref + 1 to c_t_offset
-			int min_search_read = MAX((int)c_h->q_st - 4000, 0);//from q_end to at most 4000, must be int
+			//int min_search_read = MAX((int)c_h->q_st - 4000, 0);//from q_end to at most 4000, must be int
 
 			//debug_print_ACGTstring(q_str +  min_search_read, c_h->q_st - min_search_read);
 			//debug_print_ACGTstring(ref, max_search_ref);
@@ -2424,8 +2732,10 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 			//uint8_t all_ref[30001];
 			//get_ref(idx->ref_bin.a, all_ref, t_offset_global, 30000, true);//from c_t_offset - max_search_ref + 1 to c_t_offset
 			//debug_print_ACGTstring(all_ref, 30000);
-
-			sdp_match(min_search_read, c_h->q_st - 1, q_str, ref + OVER_SEARCH_M2, max_search_ref, key_len, sa_hash, sms ,c_t_offset - max_search_ref, false);
+			int search_q_st = (int)sms->a[max_sms_id].q_pos - 1000;
+			search_q_st = MAX(search_q_st, 0);
+			int search_q_ed = MIN(search_q_st + 2000, c_h->q_st - 1);
+			sdp_match(search_q_st, search_q_ed, q_str, ref + OVER_SEARCH_M2, max_search_ref, key_len, sa_hash, sms ,c_t_offset - max_search_ref, false);
 			c_t_offset = c_t_offset - max_search_ref + S_A_KEMR_L + 3;//todo
 
 			//when load no new node
@@ -2439,8 +2749,8 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 		spd_match *c_sms = sms->a + current_sms++;
 		//SDP, get max score for that new node
 		int max_score = c_sms->len;
-		uint32_t min_pre_q = c_sms->q_pos + c_sms->len + MAX_sms_overlap;//next <= pre - pre_len - 9 ==> next + 9 <= pre - pre_len
-		uint32_t min_pre_t = c_sms->t_pos + c_sms->len + MAX_sms_overlap;
+		uint32_t min_pre_q = c_sms->q_pos + c_sms->len - MAX_sms_overlap + S_A_KEMR_L - 1;//next <= pre - pre_len - 9 ==> next + 9 <= pre - pre_len
+		uint32_t min_pre_t = c_sms->t_pos + c_sms->len - MAX_sms_overlap + S_A_KEMR_L - 1;
 		spd_match *c_sms_ed = sms->a, *c_pre_sms = sms->a + current_sms - 2;
 		for(; c_pre_sms >= c_sms_ed; c_pre_sms--)
 		{
@@ -2449,8 +2759,8 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 				continue;
 			if(c_pre_sms->t_pos < min_pre_t)//overlap target
 				continue;
-			if(min_pre_q + 600 < c_pre_sms->q_pos)//query waiting length too long, next + 600 < pre
-				break;
+			//if(min_pre_q + 600 < c_pre_sms->q_pos)//query waiting length too long, next + 600 < pre
+			//	break;
 			if(min_pre_t + 600 < c_pre_sms->t_pos)//target waiting length too long
 				break;//should be break
 			int indel = c_pre_sms->q_pos - c_pre_sms->t_pos - (min_pre_q - min_pre_t);
@@ -2458,6 +2768,13 @@ int sdp_left_M2(DA_IDX * idx, spd_match_set* sms, uint8_t *q_str, sparse_align_H
 			if(ABS_indel > 200)
 				continue;
 			int new_score = c_pre_sms->score + c_sms->len - (ABS_indel >> 3);
+			//overlap
+			if(min_pre_q + MAX_sms_overlap > c_pre_sms->q_pos || min_pre_t + MAX_sms_overlap > c_pre_sms->t_pos)
+			{
+				int overlap_q = min_pre_q + MAX_sms_overlap - c_pre_sms->q_pos;
+				int overlap_t = min_pre_t + MAX_sms_overlap - c_pre_sms->t_pos;
+				new_score -= MAX(overlap_q, overlap_t);
+			}
 			max_score = MAX(max_score, new_score);
 		}
 		c_sms->score = max_score;
@@ -2501,26 +2818,28 @@ void get_score_M2(SEARCH_DIR *search_dir, Classify_buff_pool *buff,
 		DA_IDX * idx, uint32_t l_read, cly_r *results, seed_con_hash *sc_hash)
 {
 	//BUILD space hash index for read
-
 	//sa_hash = malloc(sizeof(sparse_align_HASH)*0x100000)//at most 2M blocks, 0.25M for hash table; 1.75M for max read length
 	int key_len =build_hash_table_M2(search_dir, &(results->hit), l_read, buff->sa_hash);
 	//Part 3:read hash
 	chain_item *st_hit = results->hit.a;
 	for(int i = 0; i < results->hit.n; i++)
 	{
+		//if(st_hit[i].ref_ID == 3 || st_hit[i].ref_ID == 2)
+		//	printf("&&&&&&&&&&&&&&&");
 		if(st_hit[i].sum_score == 0)//skip result already combined by other hit
 			continue;
 		//fprintf(stderr,"\n\n\n%s %d\n\n\n\n", idx->r_i_v.a[st_hit[i].ref_ID].ref_name, st_hit[i].t_st);//DEBUG+++
-		//if(504221 == st_hit[i].t_st)
-		//	fprintf(stderr, " ");
 		//middle
 		SEARCH_DIR *c_search_dir = ((search_dir->direction == st_hit[i].direction)?0:1) + search_dir;
 		sparse_align_HASH * sa_hash = (st_hit[i].direction==FORWARD)?buff->sa_hash[0]:buff->sa_hash[1];
-		//todo:
-		spd_match_set* sms = &(buff->sms);//todo:sms
+		spd_match_set* sms = &(buff->sms);
+		//fprintf(stderr, "&&&&&-%d-%d-%d-%d-", st_hit[i].ref_ID, st_hit[i].q_st, st_hit[i].q_ed, st_hit[i].sum_score);
 		int score = sdp_middle_M2(st_hit[i].chain_anchor_cur,idx, sms, c_search_dir->bin_read, sa_hash, key_len);
+		//fprintf(stderr, "&&&&&-%d-", score);
 		score = sdp_right_M2(idx, sms, c_search_dir->bin_read, sa_hash, key_len, st_hit, i, l_read, sc_hash, score);
+		//fprintf(stderr, "&&&&&-%d-", score);
 		score = sdp_left_M2(idx, sms, c_search_dir->bin_read, sa_hash, key_len, st_hit, i, l_read, sc_hash, score);
+		//fprintf(stderr, "&&&&&-%d-\n", score);
 		st_hit[i].sum_score = score;//score -> sort score
 	}
 }
@@ -2571,7 +2890,7 @@ void delete_small_score_rst(
 		for(;rst_num < results->hit.n && results->hit.a[rst_num].sum_score > 50 ;rst_num++);
 		results->hit.n = rst_num;
 	}
-	results->hit.n = MIN(1000, results->hit.n);
+	results->hit.n = MIN(400, results->hit.n);
 
 	uint32_t l_read = results->read->seq.l;
 
@@ -2606,7 +2925,7 @@ void delete_small_score_rst(
 				if(next_c->sum_score == 0)
 					continue;
 				//when totally overlap
-				if(next_c->t_st - 5 < c_c->t_st && next_c->q_st - 5 < c_c->q_st && next_c->sum_score - 5 < c_c->sum_score)
+				if(next_c->t_st < c_c->t_st + 5 && next_c->q_st < c_c->q_st + 5 && next_c->sum_score < c_c->sum_score + 5)
 				{
 					next_c->sum_score = 0;
 					next_c->q_ed = next_c->q_st;

@@ -38,7 +38,7 @@ typedef struct{
 
 	uint64_t*		hash_index;
 
-	uint64_t 		DOLLOR_POS;//the position of "$" in the bwt string, END of original string, equal (number of UNITIG - 1)
+	uint64_t 		DOLLOR_POS ;//the position of "$" in the bwt string, END of original string, equal (number of UNITIG - 1)
 }bwt;
 
 void build_BWT(bwt *bt, char *bwt_string, uint64_t bwt_len, char *dirPath);

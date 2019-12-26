@@ -6,7 +6,7 @@ TARGET  := deSAMBA
 #compile and lib parameter
 CC      := gcc -std=c99
 LIBS    := -lm -lz -lpthread
-INCLUDE := -I ./lib  
+INCLUDE := -I ./lib
 CFLAGS  := -g -Wall -O3 $(INCLUDE)
 
 .PHONY : everything objs clean veryclean rebuild
