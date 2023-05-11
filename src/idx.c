@@ -665,8 +665,12 @@ void set_ref_lists(
 	free(start_kmer_->a);
 	//sort ref_uni_vec
 	if(ref_uni_vec.n > 1){
+		int thread_number = 16;
+		if(ref_uni_vec.n < 100){
+		    thread_number = 1;
+		}
 		FUNC_GET_TIME_P(
-		ksort_stable_mt(ref_uni_vec.a, ref_uni_vec.n, sizeof(REF_UNI), REF_UNITIG_cmp_by_UNITIG_ID, 16),
+		ksort_stable_mt(ref_uni_vec.a, ref_uni_vec.n, sizeof(REF_UNI), REF_UNITIG_cmp_by_UNITIG_ID, thread_number),
 		"sort ref_uni",true);
 	}
 
