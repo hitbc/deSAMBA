@@ -664,9 +664,11 @@ void set_ref_lists(
 	gzclose(fp_z);
 	free(start_kmer_->a);
 	//sort ref_uni_vec
-	FUNC_GET_TIME_P(
-	ksort_stable_mt(ref_uni_vec.a, ref_uni_vec.n, sizeof(REF_UNI), REF_UNITIG_cmp_by_UNITIG_ID, 16),
-	"sort ref_uni",true);
+	if(ref_uni_vec.n > 1){
+		FUNC_GET_TIME_P(
+		ksort_stable_mt(ref_uni_vec.a, ref_uni_vec.n, sizeof(REF_UNI), REF_UNITIG_cmp_by_UNITIG_ID, 16),
+		"sort ref_uni",true);
+	}
 
 	//set ref_list part for each unitig
 	UNITIG *unitig_p = unitig_v->a;
