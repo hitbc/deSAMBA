@@ -1202,6 +1202,8 @@ int bwt_cal_SA(bwt *bt, UNITIG_V *unitig_v_, uint8_V *uni_str)
 		c = bwt_Bit[(uint8_t)bwt_str[occ]];
 		if(c == 4)
 		{
+			if(unitig_ID == 0)
+        		    break;
 			unitig_ID--;
 			xassert(offset == MAX_uint32_t, "Not end of offset!\n");
 			offset = unitig_v[unitig_ID].length;
