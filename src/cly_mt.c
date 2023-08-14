@@ -24,7 +24,7 @@ typedef struct
 {
 	kseq_t	*	seqs;
 	cly_r   *	results;
-	int 		readNum;
+	long int 	readNum;
 	void 	*	share_data_pointer;
 }CLASSIFY_THREAD_DATA;
 
@@ -347,7 +347,7 @@ void output_one_result_sam(DA_IDX *idx, cly_r *p_rst, int output_seq,  MAP_opt *
 #define OUTPUT_MODE_SAM_FULL 2
 #define OUTPUT_MODE_DES 	 3
 #define OUTPUT_MODE_DES_FULL 4
-void output_results(DA_IDX *idx, cly_r *results, int n_results, MAP_opt *o)
+void output_results(DA_IDX *idx, cly_r *results, long int n_results, MAP_opt *o)
 {
 	cly_r *p_rst = results, *p_e_rst = p_rst + n_results;
 	if(o->out_format == OUTPUT_MODE_SAM)
