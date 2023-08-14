@@ -39,10 +39,10 @@ typedef struct
 	CLASSIFY_THREAD_DATA *data;
 }CLASSIFY_SHARE_DATA;
 
-int read_reads(kstream_t *_fp, kseq_t *_seqs, int n_needed)
+long int read_reads(kstream_t *_fp, kseq_t *_seqs, long int n_needed)
 {
 	kseq_t *temp = _seqs;
-	int i, rst = 0, total_length = 0;
+	long int i, rst = 0, total_length = 0;
 	for( i = 0; i < n_needed &&  total_length < MAX_read_size; ++i)
 	{
 		temp[i].f = _fp;
