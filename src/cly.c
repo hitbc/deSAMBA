@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include <string.h>
 
-#include "bwt.h"
+#include "bwt.h" 
 #include "lib/ksw/ksw2.h"
 
 //same as Bit, but all UNKNOWN characters are used as 'C'
@@ -435,10 +435,14 @@ void debug_print_ACGTstring(
 static void inline get_ref(
 		uint8_t* unitig_str,
 		uint8_t* ref_str,
-		uint64_t uni_offset,
-		uint32_t length,
+		int64_t uni_offset,
+		int32_t length,
 		bool isForward)
 {
+	if(uni_offset < 0)
+	    uni_offset = 0;
+	if(length < 0) 
+	    length = 0;
 	uint64_t offset = uni_offset >> 2;
 	uint8_t  odd    = uni_offset & 0x3;
 	if(isForward)
